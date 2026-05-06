@@ -115,7 +115,7 @@ export default function Dashboard() {
   return (
     <div className="bg-background min-h-screen">
       <TopBar
-        title="Basil Reji"
+        title="My Dashboard"
         rightSlot={
           <div className="flex items-center gap-1">
             {connected && (
