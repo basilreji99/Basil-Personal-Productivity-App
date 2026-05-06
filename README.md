@@ -1,4 +1,4 @@
-# Basil Daily
+# Basil Daily (Personal Development App)
 
 A personal productivity app built with React + Capacitor that runs on both the web and Android. All data stays in your browser's `localStorage` and syncs across devices via your own Google Drive — no backend, no subscription, no data sent to third-party servers.
 
@@ -194,8 +194,3 @@ The Google OAuth Client ID is **not** an environment variable — it is entered 
 | Calendar | Google Calendar API v3 |
 | Music | Spotify Web API (PKCE flow) |
 
----
-
-## License
-
-MIT — do whatever you want with it.
