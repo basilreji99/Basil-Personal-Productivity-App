@@ -4,14 +4,14 @@ A personal productivity app built with React + Capacitor that runs on both the w
 
 ## Features
 
-- **Tasks** — Epics → Stories → Tasks → Subtasks (Jira-style backlog + board). Sprint planning, drag-to-reorder, progress bars, due-date badges.
-- **Notes** — Rich-text notes with checklists, tags, and pinning.
-- **Finance** — Income/expense tracking with categories and recurring transactions.
-- **Habits** — Daily/weekly habit streaks.
-- **Calendar** — Google Calendar integration + task due dates on the grid.
-- **Health** — Body measurement tracker.
-- **Hobbies** — Movie/series log, music (Spotify), drawing portfolio (images stored in Google Drive), fitness log.
-- **Cross-device sync** — Backup/restore via Google Drive `appDataFolder`. Pull-to-refresh on mobile.
+- **Tasks:** Epics → Stories → Tasks → Subtasks (Jira-style backlog + board). Sprint planning, drag-to-reorder, progress bars, due-date badges.
+- **Notes:** Rich-text notes with checklists, tags, and pinning.
+- **Finance:** Income/expense tracking with categories and recurring transactions.
+- **Habits:** Daily/weekly habit streaks.
+- **Calendar:** Google Calendar integration + task due dates on the grid.
+- **Health:** Body measurement tracker.
+- **Hobbies:** Movie/series log, music (Spotify), drawing portfolio (images stored in Google Drive), fitness log.
+- **Cross-device sync:** Backup/restore via Google Drive `appDataFolder`. Pull-to-refresh on mobile.
 
 ---
 
