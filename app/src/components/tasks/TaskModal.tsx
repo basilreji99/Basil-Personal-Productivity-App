@@ -1,0 +1,552 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import Modal from '../ui/Modal';
+import TagChip from '../ui/TagChip';
+import type { Task, TaskPriority, IssueType, RecurringFrequency } from '../../types';
+import { useTasksStore } from '../../store/tasksStore';
+import { useSprintStore } from '../../store/sprintStore';
+import { useTagStore } from '../../store/tagStore';
+import { useNotesStore } from '../../store/notesStore';
+import { scheduleTaskNotifications } from '../../services/taskNotifications';
+
+const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string }[] = [
+  { value: 'critical', label: 'Emergency', color: 'text-red-700',   bg: 'bg-red-100 border-red-300' },
+  { value: 'high',     label: 'High',      color: 'text-orange-700', bg: 'bg-orange-100 border-orange-300' },
+  { value: 'medium',   label: 'Medium',    color: 'text-amber-700',  bg: 'bg-amber-100 border-amber-300' },
+  { value: 'low',      label: 'Low',       color: 'text-blue-700',   bg: 'bg-blue-100 border-blue-300' },
+  { value: 'none',     label: 'None',      color: 'text-outline',    bg: 'bg-surface-container border-outline-variant' },
+];
+
+const ISSUE_TYPES: { value: IssueType; label: string; icon: string; cls: string }[] = [
+  { value: 'epic',    label: 'Epic',    icon: 'bolt',                      cls: 'bg-purple-100 text-purple-700 border-purple-300' },
+  { value: 'story',   label: 'Story',   icon: 'bookmark',                  cls: 'bg-blue-100 text-blue-700 border-blue-300' },
+  { value: 'task',    label: 'Task',    icon: 'task_alt',                  cls: 'bg-surface-container text-on-surface-variant border-outline-variant' },
+  { value: 'bug',     label: 'Bug',     icon: 'bug_report',                cls: 'bg-red-100 text-red-700 border-red-300' },
+  { value: 'subtask', label: 'Subtask', icon: 'subdirectory_arrow_right',  cls: 'bg-gray-100 text-gray-600 border-gray-300' },
+];
+
+const STORY_POINTS = [1, 2, 3, 5, 8, 13];
+
+function toHtml(text: string): string {
+  if (!text) return '';
+  if (text.startsWith('<')) return text;
+  return text.split('\n').map((line) => `<p>${line || '<br/>'}</p>`).join('');
+}
+
+function DescriptionEditor({ content, onChange }: { content: string; onChange: (html: string) => void }) {
+  const editor = useEditor({
+    extensions: [StarterKit, Underline],
+    content: toHtml(content),
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    editorProps: {
+      attributes: {
+        class: 'min-h-[72px] max-h-[200px] overflow-y-auto outline-none font-work-sans text-sm text-on-surface leading-relaxed px-3 py-2',
+      },
+    },
+  });
+
+  if (!editor) return null;
+
+  const Btn = ({ active, onPress, children }: { active: boolean; onPress: () => void; children: React.ReactNode }) => (
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onPress(); }}
+      className={`px-2 py-1 rounded text-xs font-medium transition-colors select-none ${active ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div className="border border-outline-variant/30 rounded-lg overflow-hidden focus-within:border-primary/40 transition-colors">
+      <div className="flex gap-0.5 p-1.5 border-b border-outline-variant/20 bg-surface-container/50 flex-wrap">
+        <Btn active={editor.isActive('bold')} onPress={() => editor.chain().focus().toggleBold().run()}>
+          <strong>B</strong>
+        </Btn>
+        <Btn active={editor.isActive('italic')} onPress={() => editor.chain().focus().toggleItalic().run()}>
+          <em>I</em>
+        </Btn>
+        <Btn active={editor.isActive('underline')} onPress={() => editor.chain().focus().toggleUnderline().run()}>
+          <span className="underline">U</span>
+        </Btn>
+        <Btn active={editor.isActive('code')} onPress={() => editor.chain().focus().toggleCode().run()}>
+          {'</>'}
+        </Btn>
+        <div className="w-px h-5 bg-outline-variant/40 self-center mx-0.5" />
+        <Btn active={editor.isActive('bulletList')} onPress={() => editor.chain().focus().toggleBulletList().run()}>
+          • List
+        </Btn>
+        <Btn active={editor.isActive('orderedList')} onPress={() => editor.chain().focus().toggleOrderedList().run()}>
+          1. List
+        </Btn>
+        <div className="flex-1" />
+        <Btn active={false} onPress={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>
+          Clear
+        </Btn>
+      </div>
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+interface TaskModalProps {
+  open: boolean;
+  onClose: () => void;
+  task?: Task | null;
+  defaultStatus?: string;
+  parentId?: string | null;
+  defaultIssueType?: IssueType;
+  scopeEpicId?: string | null;
+}
+
+export default function TaskModal({
+  open, onClose, task, defaultStatus = 'backlog', parentId = null, defaultIssueType, scopeEpicId = null,
+}: TaskModalProps) {
+  const { columns, tasks, addTask, updateTask } = useTasksStore();
+  const { sprints } = useSprintStore();
+  const { notes } = useNotesStore();
+  const { recordUsage, getSuggestions } = useTagStore();
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState(defaultStatus);
+  const [priority, setPriority] = useState<TaskPriority>('none');
+  const [issueType, setIssueType] = useState<IssueType>(defaultIssueType ?? 'task');
+  const [storyPoints, setStoryPoints] = useState<number | undefined>(undefined);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(parentId);
+  const [sprintId, setSprintId] = useState<string | null>(null);
+  const [linkedNoteIds, setLinkedNoteIds] = useState<string[]>([]);
+  const [noteSearch, setNoteSearch] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('');
+  const [recurring, setRecurring] = useState<RecurringFrequency | ''>('');
+
+  // Available parents by issue type, scoped to a specific epic if opened from within one
+  const parentOptions = useMemo(() => {
+    if (issueType === 'epic') return [];
+    let candidates: Task[];
+    if (issueType === 'story') {
+      candidates = tasks.filter((t) => t.issueType === 'epic');
+    } else if (issueType === 'task' || issueType === 'bug') {
+      candidates = tasks.filter((t) => t.issueType === 'epic' || t.issueType === 'story');
+    } else if (issueType === 'subtask') {
+      candidates = tasks.filter((t) => t.issueType === 'task' || t.issueType === 'bug' || t.issueType === 'story');
+    } else {
+      return [];
+    }
+    if (scopeEpicId) {
+      candidates = candidates.filter((t) => t.id === scopeEpicId || t.parentId === scopeEpicId);
+    }
+    return candidates;
+  }, [issueType, tasks, scopeEpicId]);
+
+  const filteredNotes = useMemo(() => {
+    const q = noteSearch.trim().toLowerCase();
+    return notes
+      .filter((n) => !linkedNoteIds.includes(n.id))
+      .filter((n) => !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [notes, linkedNoteIds, noteSearch]);
+
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title);
+      setDescription(task.description);
+      setStatus(task.status);
+      setPriority(task.priority);
+      setIssueType(task.issueType ?? 'task');
+      setStoryPoints(task.storyPoints);
+      setSelectedParentId(task.parentId);
+      setSprintId(task.sprintId ?? null);
+      setLinkedNoteIds(task.linkedNoteIds ?? []);
+      setTags(task.tags);
+      setDueDate(task.dueDate ? task.dueDate.split('T')[0] : '');
+      setStartTime(task.startTime ?? '');
+      setDeadlineTime(task.deadlineTime ?? '');
+      setRecurring(task.recurring?.frequency ?? '');
+    } else {
+      setTitle('');
+      setDescription('');
+      setStatus(defaultStatus);
+      setPriority('none');
+      setIssueType(defaultIssueType ?? 'task');
+      setStoryPoints(undefined);
+      setSelectedParentId(parentId);
+      setSprintId(null);
+      setLinkedNoteIds([]);
+      setTags([]);
+      setDueDate('');
+      setStartTime('');
+      setDeadlineTime('');
+      setRecurring('');
+    }
+    setTagInput('');
+    setNoteSearch('');
+  }, [task, open, defaultStatus, parentId, defaultIssueType]);
+
+  useEffect(() => {
+    if (issueType === 'epic') setSelectedParentId(null);
+  }, [issueType]);
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    const hasTime = issueType !== 'subtask';
+    const payload: Partial<Task> = {
+      title: title.trim(),
+      description,
+      status,
+      priority,
+      issueType,
+      storyPoints,
+      tags,
+      parentId: selectedParentId,
+      sprintId,
+      linkedNoteIds,
+      dueDate: dueDate || null,
+      startTime: hasTime && dueDate && startTime ? startTime : undefined,
+      deadlineTime: hasTime && dueDate && deadlineTime ? deadlineTime : undefined,
+      recurring: recurring
+        ? { frequency: recurring as RecurringFrequency, nextDue: dueDate || new Date().toISOString() }
+        : null,
+    };
+    if (tags.length) recordUsage(tags);
+    let savedId: string;
+    if (task) {
+      updateTask(task.id, payload);
+      savedId = task.id;
+    } else {
+      const created = addTask(payload);
+      savedId = created.id;
+    }
+    if (hasTime) {
+      scheduleTaskNotifications({
+        id: savedId,
+        title: title.trim(),
+        dueDate: dueDate || null,
+        startTime: payload.startTime,
+        deadlineTime: payload.deadlineTime,
+      });
+    }
+    onClose();
+  };
+
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (t && !tags.includes(t)) setTags([...tags, t]);
+    setTagInput('');
+  };
+
+  const handleTagKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); }
+    if (e.key === 'Backspace' && !tagInput && tags.length) setTags(tags.slice(0, -1));
+  };
+
+  const suggestions = getSuggestions(tags, tagInput, 5);
+
+  const modalTitle = task ? 'Edit' : parentId ? `New ${ISSUE_TYPES.find((t) => t.value === issueType)?.label}` : 'New Task';
+
+  return (
+    <Modal open={open} onClose={onClose} title={modalTitle} size="md">
+      <div className="p-5 space-y-4">
+
+        {/* Title */}
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title"
+          autoFocus
+          className="w-full border-none outline-none font-manrope font-bold text-lg text-on-surface bg-surface-container rounded-lg px-3 py-2 placeholder:text-outline/50"
+        />
+
+        {/* Issue type */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Type</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {ISSUE_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setIssueType(t.value)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
+                  issueType === t.value ? t.cls + ' border-current ring-1 ring-current/30' : 'border-outline-variant text-on-surface-variant hover:border-outline'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[13px]">{t.icon}</span>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Parent */}
+        {parentOptions.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
+              Parent {issueType === 'story' ? 'Epic' : issueType === 'subtask' ? 'Task / Story' : 'Epic / Story'}
+            </label>
+            <select
+              value={selectedParentId ?? ''}
+              onChange={(e) => setSelectedParentId(e.target.value || null)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+            >
+              <option value="">— No parent —</option>
+              {parentOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  [{p.issueType.toUpperCase()}] {p.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Sprint */}
+        {sprints.length > 0 && issueType !== 'epic' && (
+          <div className="space-y-1.5">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Sprint</label>
+            <select
+              value={sprintId ?? ''}
+              onChange={(e) => setSprintId(e.target.value || null)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+            >
+              <option value="">— No sprint —</option>
+              {sprints.map((sp) => (
+                <option key={sp.id} value={sp.id}>
+                  {sp.name} ({sp.status})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Description (rich text) */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Description</label>
+          <DescriptionEditor content={description} onChange={setDescription} />
+        </div>
+
+        {/* Status + Priority row */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+            >
+              {columns.map((col) => (
+                <option key={col.id} value={col.id}>{col.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Priority</label>
+            <div className="flex flex-wrap gap-1">
+              {PRIORITIES.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value)}
+                  className={`px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
+                    priority === p.value ? `${p.bg} ${p.color}` : 'border-outline-variant text-on-surface-variant hover:border-outline'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Story points */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
+            Effort Points <span className="normal-case text-outline/60 font-normal">(1=trivial → 13=very large)</span>
+          </label>
+          <div className="flex gap-1.5">
+            {STORY_POINTS.map((pt) => (
+              <button
+                key={pt}
+                type="button"
+                onClick={() => setStoryPoints(storyPoints === pt ? undefined : pt)}
+                className={`w-9 h-9 rounded-lg border font-inter font-bold text-sm transition-all ${
+                  storyPoints === pt
+                    ? 'bg-primary text-on-primary border-primary'
+                    : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+                }`}
+              >
+                {pt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Due Date + Recurring */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Due Date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Recurring</label>
+            <select
+              value={recurring}
+              onChange={(e) => setRecurring(e.target.value as RecurringFrequency | '')}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+            >
+              <option value="">Not recurring</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Start / Deadline time */}
+        {issueType !== 'subtask' && dueDate && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">schedule</span>
+                Start Time
+              </label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+              />
+              {startTime && (
+                <button onClick={() => setStartTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">timer</span>
+                Deadline Time
+              </label>
+              <input
+                type="time"
+                value={deadlineTime}
+                onChange={(e) => setDeadlineTime(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+              />
+              {deadlineTime && (
+                <button onClick={() => setDeadlineTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>
+              )}
+            </div>
+          </div>
+        )}
+        {issueType !== 'subtask' && dueDate && (startTime || deadlineTime) && (
+          <p className="font-inter text-[10px] text-outline -mt-2">
+            <span className="material-symbols-outlined text-[11px] align-middle">notifications</span>
+            {' '}You'll be notified 1 hour and 30 minutes before each time.
+          </p>
+        )}
+
+        {/* Linked Notes */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px]">sticky_note_2</span>
+            Linked Notes
+          </label>
+          {linkedNoteIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {linkedNoteIds.map((nid) => {
+                const n = notes.find((x) => x.id === nid);
+                return n ? (
+                  <div key={nid} className="flex items-center gap-1 bg-primary/10 text-primary rounded-full px-2.5 py-1 font-inter text-xs">
+                    <span>{n.title || 'Untitled'}</span>
+                    <button onClick={() => setLinkedNoteIds((ids) => ids.filter((id) => id !== nid))} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+                  </div>
+                ) : null;
+              })}
+            </div>
+          )}
+          <input
+            type="text"
+            value={noteSearch}
+            onChange={(e) => setNoteSearch(e.target.value)}
+            placeholder="Search notes to link..."
+            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40 placeholder:text-outline/50"
+          />
+          {noteSearch && filteredNotes.length > 0 && (
+            <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+              {filteredNotes.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => { setLinkedNoteIds((ids) => [...ids, n.id]); setNoteSearch(''); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-container text-left transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px] text-outline">sticky_note_2</span>
+                  <span className="font-inter text-sm text-on-surface truncate">{n.title || 'Untitled Note'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {noteSearch && filteredNotes.length === 0 && (
+            <p className="font-inter text-xs text-outline px-1">No matching notes</p>
+          )}
+        </div>
+
+        {/* Tags */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Tags</label>
+          <div className="flex flex-wrap gap-1.5 items-center min-h-[32px] bg-surface-container rounded-lg px-3 py-2">
+            {tags.map((tag) => (
+              <TagChip key={tag} tag={tag} onRemove={() => setTags(tags.filter((t) => t !== tag))} size="sm" />
+            ))}
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={handleTagKey}
+              onBlur={addTag}
+              placeholder={tags.length ? '' : 'Add tag...'}
+              className="bg-transparent border-none outline-none font-inter text-xs text-on-surface placeholder:text-outline/50 flex-1 min-w-[80px]"
+            />
+          </div>
+          {suggestions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setTags([...tags, s]); }}
+                  className="px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant font-inter text-xs text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  + {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter font-medium text-sm hover:bg-surface-container transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim()}
+            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-inter font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            {task ? 'Save' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

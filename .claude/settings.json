@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx cap *)",
+      "Bash(npm list *)",
+      "Bash(Remove-Item -Recurse -Force \"d:\\\\Edu\\\\Projects\\\\notes app\\\\calendar\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\dashboard\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\executive_flow\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\notes\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\personal_finance\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\task_details_hierarchy\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\tasks_board\", \"d:\\\\Edu\\\\Projects\\\\notes app\\\\DESIGN.md\")",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(Select-Object Line\")",
+      "Bash(dir /s /b *.tsx *.ts)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const XLSX = require\\('xlsx'\\); const p = 'D:/Edu/Projects/notes app/data/Fitness Tracking.xlsx'; const wb = XLSX.readFile\\(p\\); const ws = wb.Sheets[wb.SheetNames[0]]; const data = XLSX.utils.sheet_to_json\\(ws\\); console.log\\(JSON.stringify\\(data\\)\\);\")",
+      "Bash(node -e \"const XLSX = require\\('xlsx'\\); const wb = XLSX.readFile\\('./data/Fitness Tracking.xlsx'\\); const ws = wb.Sheets[wb.SheetNames[0]]; const data = XLSX.utils.sheet_to_json\\(ws\\); console.log\\(JSON.stringify\\(data\\)\\);\")"
+    ]
+  }
+}
