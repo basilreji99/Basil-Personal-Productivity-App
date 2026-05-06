@@ -2,6 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Light theme (default) ──────────────────────────────────────────────────── */
+:root {
+  --c-primary:                  0 74 198;
+  --c-on-primary:               255 255 255;
+  --c-primary-container:        37 99 235;
+  --c-on-primary-container:     238 239 255;
+  --c-inverse-primary:          180 197 255;
+  --c-secondary:                113 42 226;
+  --c-on-secondary:             255 255 255;
+  --c-secondary-container:      138 76 252;
+  --c-on-secondary-container:   255 251 255;
+  --c-tertiary:                 0 98 67;
+  --c-on-tertiary:              255 255 255;
+  --c-tertiary-container:       0 125 87;
+  --c-on-tertiary-container:    189 255 220;
+  --c-error:                    186 26 26;
+  --c-on-error:                 255 255 255;
+  --c-error-container:          255 218 214;
+  --c-on-error-container:       147 0 10;
+  --c-background:               248 249 255;
+  --c-on-background:            18 28 40;
+  --c-surface:                  248 249 255;
+  --c-surface-dim:              209 219 236;
+  --c-surface-bright:           248 249 255;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-container-low:    238 244 255;
+  --c-surface-container:        229 238 255;
+  --c-surface-container-high:   223 233 250;
+  --c-surface-container-highest:217 227 244;
+  --c-surface-variant:          217 227 244;
+  --c-surface-tint:             0 83 219;
+  --c-on-surface:               18 28 40;
+  --c-on-surface-variant:       67 70 85;
+  --c-inverse-surface:          39 49 62;
+  --c-inverse-on-surface:       234 241 255;
+  --c-outline:                  115 118 134;
+  --c-outline-variant:          195 198 215;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────────── */
+.dark {
+  --c-primary:                  180 197 255;
+  --c-on-primary:               0 23 75;
+  --c-primary-container:        0 62 168;
+  --c-on-primary-container:     219 225 255;
+  --c-inverse-primary:          0 74 198;
+  --c-secondary:                210 187 255;
+  --c-on-secondary:             37 0 90;
+  --c-secondary-container:      90 0 198;
+  --c-on-secondary-container:   234 221 255;
+  --c-tertiary:                 104 219 169;
+  --c-on-tertiary:              0 33 20;
+  --c-tertiary-container:       0 81 55;
+  --c-on-tertiary-container:    133 248 196;
+  --c-error:                    255 180 171;
+  --c-on-error:                 105 0 5;
+  --c-error-container:          147 0 10;
+  --c-on-error-container:       255 218 214;
+  --c-background:               13 18 28;
+  --c-on-background:            220 230 248;
+  --c-surface:                  13 18 28;
+  --c-surface-dim:              13 18 28;
+  --c-surface-bright:           55 67 84;
+  --c-surface-container-lowest: 8 12 20;
+  --c-surface-container-low:    20 28 42;
+  --c-surface-container:        26 36 54;
+  --c-surface-container-high:   34 46 67;
+  --c-surface-container-highest:43 56 80;
+  --c-surface-variant:          67 70 85;
+  --c-surface-tint:             180 197 255;
+  --c-on-surface:               220 230 248;
+  --c-on-surface-variant:       195 198 215;
+  --c-inverse-surface:          220 230 248;
+  --c-inverse-on-surface:       39 49 62;
+  --c-outline:                  141 144 162;
+  --c-outline-variant:          67 70 85;
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -16,8 +94,8 @@
 
   body {
     font-family: 'Work Sans', sans-serif;
-    background-color: #f8f9ff;
-    color: #121c28;
+    background-color: rgb(var(--c-background));
+    color: rgb(var(--c-on-surface));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior: none;

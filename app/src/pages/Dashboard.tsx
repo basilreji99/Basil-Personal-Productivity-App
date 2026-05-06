@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useThemeStore } from '../store/themeStore';
 import { format, parseISO } from 'date-fns';
 import TopBar from '../components/layout/TopBar';
 import FocusTimer from '../components/timer/FocusTimer';
@@ -112,12 +113,28 @@ export default function Dashboard() {
   const connected = tokenValid || calendarAccounts.length > 0;
   const driveExpired = hasDriveToken && !tokenValid; // was connected, now expired
 
+  const { mode, setMode, resolvedDark } = useThemeStore();
+  const isDark = resolvedDark();
+  function cycleTheme() {
+    setMode(mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light');
+  }
+
   return (
     <div className="bg-background min-h-screen">
       <TopBar
         title="My Dashboard"
         rightSlot={
           <div className="flex items-center gap-1">
+            {/* Dark mode toggle */}
+            <button
+              onClick={cycleTheme}
+              title={`Theme: ${mode} — click to cycle`}
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                {isDark ? 'dark_mode' : mode === 'system' ? 'brightness_auto' : 'light_mode'}
+              </span>
+            </button>
             {connected && (
               <button
                 onClick={() => syncNow()}

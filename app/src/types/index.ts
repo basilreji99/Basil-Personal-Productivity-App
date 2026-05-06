@@ -17,6 +17,13 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+export interface NoteFolder {
+  id: string;
+  name: string;
+  emoji: string;
+  createdAt: string;
+}
+
 export interface Note {
   id: string;
   title: string;
@@ -27,6 +34,7 @@ export interface Note {
   tags: string[];
   color: NoteColor;
   pinned: boolean;
+  folderId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +154,7 @@ export interface Habit {
   targetDays: number; // times/week for weekly; 7 for daily; 1 for monthly
   hasNotes: boolean; // prompt user to log notes when completing
   notesPrompt?: string; // e.g. "Which book?" "Which workout?"
+  reminderTime?: string; // HH:MM — daily push notification at this time (optional)
   createdAt: string;
   archivedAt: string | null;
 }

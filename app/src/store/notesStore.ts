@@ -1,15 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Note, NoteColor, NoteType } from '../types';
+import type { Note, NoteColor, NoteType, NoteFolder } from '../types';
 import { nanoid } from '../utils/nanoid';
 
 interface NotesState {
   notes: Note[];
+  folders: NoteFolder[];
+
   addNote: (note: Partial<Omit<Note, 'id' | 'createdAt' | 'updatedAt'>>) => Note;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   togglePin: (id: string) => void;
   allTags: () => string[];
+
+  addFolder: (name: string, emoji?: string) => NoteFolder;
+  updateFolder: (id: string, updates: Partial<Pick<NoteFolder, 'name' | 'emoji'>>) => void;
+  deleteFolder: (id: string) => void;
 }
 
 export const useNotesStore = create<NotesState>()(
@@ -32,6 +38,7 @@ export const useNotesStore = create<NotesState>()(
           tags: ['Personal', 'Shopping'],
           color: 'default',
           pinned: true,
+          folderId: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -45,6 +52,7 @@ export const useNotesStore = create<NotesState>()(
           tags: ['Productivity'],
           color: 'blue',
           pinned: false,
+          folderId: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -58,10 +66,13 @@ export const useNotesStore = create<NotesState>()(
           tags: ['Personal', 'Growth'],
           color: 'green',
           pinned: false,
+          folderId: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
       ],
+
+      folders: [],
 
       addNote: (partial) => {
         const note: Note = {
@@ -74,6 +85,7 @@ export const useNotesStore = create<NotesState>()(
           tags: partial.tags ?? [],
           color: (partial.color as NoteColor) ?? 'default',
           pinned: partial.pinned ?? false,
+          folderId: partial.folderId ?? null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -103,7 +115,36 @@ export const useNotesStore = create<NotesState>()(
         get().notes.forEach((n) => n.tags.forEach((t) => tags.add(t)));
         return Array.from(tags).sort();
       },
+
+      addFolder: (name, emoji = '📁') => {
+        const folder: NoteFolder = { id: nanoid(), name, emoji, createdAt: new Date().toISOString() };
+        set((s) => ({ folders: [...s.folders, folder] }));
+        return folder;
+      },
+
+      updateFolder: (id, updates) =>
+        set((s) => ({
+          folders: s.folders.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+        })),
+
+      deleteFolder: (id) =>
+        set((s) => ({
+          folders: s.folders.filter((f) => f.id !== id),
+          // Move notes out of deleted folder
+          notes: s.notes.map((n) => (n.folderId === id ? { ...n, folderId: null } : n)),
+        })),
     }),
-    { name: 'productivity-notes' },
+    {
+      name: 'productivity-notes',
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as NotesState;
+        if (version < 2) {
+          state.folders = state.folders ?? [];
+          state.notes = (state.notes ?? []).map((n) => ({ folderId: null, ...n }));
+        }
+        return state;
+      },
+    },
   ),
 );

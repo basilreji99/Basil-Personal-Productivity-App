@@ -9,6 +9,51 @@ import { useTasksStore } from '../store/tasksStore';
 import { useNavigate } from 'react-router-dom';
 import { buildCalendarAuthUrl, openAuthUrl } from '../services/googleAuth';
 
+function EventRow({
+  ev, localEvents, onNavigate, onEdit,
+}: {
+  ev: UnifiedEvent;
+  localEvents: LocalEvent[];
+  onNavigate: (taskId: string) => void;
+  onEdit: (local: LocalEvent) => void;
+}) {
+  return (
+    <button
+      onClick={() => {
+        if (ev.id.startsWith('task-')) {
+          onNavigate(ev.id.slice(5));
+        } else if (ev.source === 'local') {
+          const local = localEvents.find(e => e.id === ev.id);
+          if (local) onEdit(local);
+        }
+      }}
+      className="w-full bg-surface-container rounded-xl px-4 py-3 flex items-start gap-3 text-left active:bg-surface-container-high"
+    >
+      <div className="w-1 self-stretch rounded-full shrink-0 min-h-[20px]" style={{ backgroundColor: ev.color }} />
+      <div className="flex-1 min-w-0">
+        <p className="font-inter font-medium text-sm text-on-surface">{ev.title}</p>
+        {ev.location && (
+          <p className="font-inter text-xs text-on-surface-variant truncate mt-0.5">
+            <span className="material-symbols-outlined text-[12px] align-middle mr-0.5">location_on</span>
+            {ev.location}
+          </p>
+        )}
+        {ev.accountEmail && (
+          <p className="font-inter text-[10px] text-outline mt-0.5 truncate">{ev.accountEmail}</p>
+        )}
+      </div>
+      <div className="shrink-0 text-right">
+        <span className="font-inter text-xs text-on-surface-variant">
+          {formatTime(ev.startTime, ev.isAllDay)}
+        </span>
+        {ev.endTime && !ev.isAllDay && (
+          <p className="font-inter text-[10px] text-outline">– {formatTime(ev.endTime)}</p>
+        )}
+      </div>
+    </button>
+  );
+}
+
 function formatTime(timeStr?: string, isAllDay?: boolean) {
   if (isAllDay || !timeStr) return 'All day';
   const [h, m] = timeStr.split(':').map(Number);
@@ -81,6 +126,7 @@ export default function Calendar() {
   const [viewYear, setViewYear] = useState(todayDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
   const [selectedDate, setSelectedDate] = useState(today);
+  const [calView, setCalView] = useState<'month' | 'agenda'>('month');
   const [eventModal, setEventModal] = useState<{ open: boolean; event?: LocalEvent; defaultDate?: string }>({ open: false });
   const [inputId, setInputId] = useState(clientId);
   const [showSetup, setShowSetup] = useState(false);
@@ -120,6 +166,29 @@ export default function Calendar() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, useCalendarStore.getState().cachedGoogleEvents, localEvents, fitnessEvents, taskEvents]);
+
+  // Agenda: next 30 days of events grouped by date
+  const agendaGroups = useMemo(() => {
+    const groups: { date: string; events: UnifiedEvent[] }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = toYMD(d);
+      const base = getEventsForDate(dateStr);
+      const fit = fitnessEvents.filter(e => e.date === dateStr);
+      const tkev = taskEvents.filter(e => e.date === dateStr);
+      const evs = [...base, ...fit, ...tkev].sort((a, b) => {
+        if (a.isAllDay && !b.isAllDay) return -1;
+        if (!a.isAllDay && b.isAllDay) return 1;
+        return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+      });
+      if (evs.length > 0 || i === 0) {
+        groups.push({ date: dateStr, events: evs });
+      }
+    }
+    return groups;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useCalendarStore.getState().cachedGoogleEvents, localEvents, fitnessEvents, taskEvents]);
 
   function handlePrev() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
@@ -179,6 +248,20 @@ export default function Calendar() {
             {isFetching && (
               <span className="material-symbols-outlined text-[20px] text-on-surface-variant animate-spin">sync</span>
             )}
+            {/* View toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-outline-variant/40 mr-1">
+              {(['month', 'agenda'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setCalView(v)}
+                  className={`px-2.5 py-1 font-inter text-[11px] font-semibold capitalize transition-colors ${
+                    calView === v ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
             {hasAnyAccount && (
               <button
                 onClick={() => { fetchCalendar(); const start = new Date(viewYear, viewMonth, 1).toISOString(); const end = new Date(viewYear, viewMonth + 1, 1).toISOString(); fetchAllEvents(start, end, primaryToken); }}
@@ -334,88 +417,110 @@ export default function Calendar() {
           </div>
         )}
 
-        {/* Month grid */}
-        <MonthGrid
-          year={viewYear}
-          month={viewMonth}
-          eventsByDate={eventsByDate}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onToday={handleToday}
-        />
+        {calView === 'month' ? (
+          <>
+            {/* Month grid */}
+            <MonthGrid
+              year={viewYear}
+              month={viewMonth}
+              eventsByDate={eventsByDate}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              onToday={handleToday}
+            />
 
-        {/* Selected day events */}
-        <section>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="font-inter font-semibold text-sm text-on-surface">{formatSelectedDate()}</h2>
-            <button
-              onClick={() => setEventModal({ open: true, defaultDate: selectedDate })}
-              className="flex items-center gap-1 text-xs text-primary font-inter font-medium"
-            >
-              <span className="material-symbols-outlined text-[14px]">add</span>
-              Add event
-            </button>
-          </div>
-
-          {dayEvents.length === 0 ? (
-            <div className="bg-surface-container rounded-xl px-4 py-6 text-center">
-              <span className="material-symbols-outlined text-[32px] text-on-surface-variant">event_available</span>
-              <p className="font-inter text-sm text-on-surface-variant mt-1">No events</p>
-              {!hasAnyAccount && (
+            {/* Selected day events */}
+            <section>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <h2 className="font-inter font-semibold text-sm text-on-surface">{formatSelectedDate()}</h2>
                 <button
-                  onClick={() => setShowAccounts(true)}
-                  className="mt-2 text-xs text-primary font-inter"
+                  onClick={() => setEventModal({ open: true, defaultDate: selectedDate })}
+                  className="flex items-center gap-1 text-xs text-primary font-inter font-medium"
                 >
-                  Connect a Google account to see your events
+                  <span className="material-symbols-outlined text-[14px]">add</span>
+                  Add event
                 </button>
+              </div>
+
+              {dayEvents.length === 0 ? (
+                <div className="bg-surface-container rounded-xl px-4 py-6 text-center">
+                  <span className="material-symbols-outlined text-[32px] text-on-surface-variant">event_available</span>
+                  <p className="font-inter text-sm text-on-surface-variant mt-1">No events</p>
+                  {!hasAnyAccount && (
+                    <button onClick={() => setShowAccounts(true)} className="mt-2 text-xs text-primary font-inter">
+                      Connect a Google account to see your events
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {dayEvents.map(ev => (
+                    <EventRow
+                      key={ev.id}
+                      ev={ev}
+                      localEvents={localEvents}
+                      onNavigate={(id) => navigate(`/tasks/${id}`)}
+                      onEdit={(local) => setEventModal({ open: true, event: local })}
+                    />
+                  ))}
+                </div>
               )}
+            </section>
+          </>
+        ) : (
+          /* Agenda view */
+          <section>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="font-inter font-semibold text-sm text-on-surface">Upcoming — next 30 days</h2>
+              <button
+                onClick={() => setEventModal({ open: true, defaultDate: today })}
+                className="flex items-center gap-1 text-xs text-primary font-inter font-medium"
+              >
+                <span className="material-symbols-outlined text-[14px]">add</span>
+                Add event
+              </button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {dayEvents.map(ev => (
-                <button
-                  key={ev.id}
-                  onClick={() => {
-                    if (ev.id.startsWith('task-')) {
-                      navigate(`/tasks/${ev.id.slice(5)}`);
-                    } else if (ev.source === 'local') {
-                      const local = localEvents.find(e => e.id === ev.id);
-                      if (local) setEventModal({ open: true, event: local });
-                    }
-                  }}
-                  className="w-full bg-surface-container rounded-xl px-4 py-3 flex items-start gap-3 text-left active:bg-surface-container-high"
-                >
-                  <div
-                    className="w-1 self-stretch rounded-full shrink-0 min-h-[20px]"
-                    style={{ backgroundColor: ev.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-inter font-medium text-sm text-on-surface">{ev.title}</p>
-                    {ev.location && (
-                      <p className="font-inter text-xs text-on-surface-variant truncate mt-0.5">
-                        <span className="material-symbols-outlined text-[12px] align-middle mr-0.5">location_on</span>
-                        {ev.location}
-                      </p>
-                    )}
-                    {ev.accountEmail && (
-                      <p className="font-inter text-[10px] text-outline mt-0.5 truncate">{ev.accountEmail}</p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <span className="font-inter text-xs text-on-surface-variant">
-                      {formatTime(ev.startTime, ev.isAllDay)}
-                    </span>
-                    {ev.endTime && !ev.isAllDay && (
-                      <p className="font-inter text-[10px] text-outline">– {formatTime(ev.endTime)}</p>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+            {agendaGroups.every(g => g.events.length === 0) ? (
+              <div className="bg-surface-container rounded-xl px-4 py-8 text-center">
+                <span className="material-symbols-outlined text-[36px] text-on-surface-variant">event_available</span>
+                <p className="font-inter text-sm text-on-surface-variant mt-2">No upcoming events</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {agendaGroups.filter(g => g.events.length > 0).map(({ date, events }) => {
+                  const d = new Date(date + 'T12:00:00');
+                  const isToday = date === today;
+                  const label = isToday
+                    ? 'Today'
+                    : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+                  return (
+                    <div key={date}>
+                      <div className={`flex items-center gap-2 mb-1.5 px-1`}>
+                        <span className={`font-inter text-xs font-semibold ${isToday ? 'text-primary' : 'text-on-surface-variant'}`}>
+                          {label}
+                        </span>
+                        {isToday && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                      </div>
+                      <div className="space-y-1.5">
+                        {events.map(ev => (
+                          <EventRow
+                            key={ev.id}
+                            ev={ev}
+                            localEvents={localEvents}
+                            onNavigate={(id) => navigate(`/tasks/${id}`)}
+                            onEdit={(local) => setEventModal({ open: true, event: local })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       {/* FAB */}

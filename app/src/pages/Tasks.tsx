@@ -74,7 +74,7 @@ function TaskRow({
   onAddChild: (parentId: string, type: IssueType, scopeEpicId?: string) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }) {
-  const { updateTask, deleteTask } = useTasksStore();
+  const { updateTask } = useTasksStore();
   const [expanded, setExpanded] = useState(true);
   const children = tasks.filter((t) => t.parentId === task.id);
   const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
@@ -211,8 +211,8 @@ function EpicSection({
   onAddChild: (parentId: string, type: IssueType, scopeEpicId?: string) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }) {
-  const { updateTask, deleteTask, reorderItems } = useTasksStore();
-  const [expanded, setExpanded] = useState(true);
+  const { updateTask, reorderItems } = useTasksStore();
+  const [expanded, setExpanded] = useState(false);
 
   const directChildren = useMemo(
     () => tasks.filter((t) => t.parentId === epic.id).sort((a, b) => a.order - b.order),
@@ -511,7 +511,7 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
 // ─── Main Tasks page ──────────────────────────────────────────────────────────
 
 export default function Tasks() {
-  const { tasks, columns, addTask, updateTask, deleteTask, reorderItems } = useTasksStore();
+  const { tasks, columns, addTask, updateTask, reorderItems } = useTasksStore();
   const { sprints, activeSprint, deleteSprint, updateSprint } = useSprintStore();
   const pinnedTags = useTagStore((s) => s.pinned);
   const tagUsage = useTagStore((s) => s.usage);
@@ -522,6 +522,8 @@ export default function Tasks() {
 
   const [view, setView] = useState<'backlog' | 'board' | 'sprint'>('backlog');
   const [activeTag, setActiveTag] = useState('All');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterDue, setFilterDue] = useState<'all' | 'overdue' | 'week'>('all');
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [sprintModalOpen, setSprintModalOpen] = useState(false);
@@ -542,9 +544,16 @@ export default function Tasks() {
   );
 
   const filteredTasks = useMemo(() => {
-    if (activeTag === 'All') return tasks;
-    return tasks.filter((t) => t.tags.includes(activeTag));
-  }, [tasks, activeTag]);
+    let list = activeTag === 'All' ? tasks : tasks.filter((t) => t.tags.includes(activeTag));
+    if (filterPriority !== 'all') list = list.filter((t) => t.priority === filterPriority);
+    if (filterDue === 'overdue') list = list.filter((t) => t.dueDate && isOverdue(t.dueDate) && t.status !== 'done');
+    if (filterDue === 'week') {
+      const inSevenDays = new Date(); inSevenDays.setDate(inSevenDays.getDate() + 7);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      list = list.filter((t) => t.dueDate && t.dueDate >= todayStr && t.dueDate <= inSevenDays.toISOString().slice(0, 10) && t.status !== 'done');
+    }
+    return list;
+  }, [tasks, activeTag, filterPriority, filterDue]);
 
   const epics = useMemo(
     () => filteredTasks.filter((t) => t.issueType === 'epic' && !t.parentId).sort((a, b) => a.order - b.order),
@@ -678,7 +687,7 @@ export default function Tasks() {
         </div>
 
         {/* Tag filters */}
-        <div className="flex gap-2 px-4 pb-2.5 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2 px-4 pb-1 overflow-x-auto no-scrollbar">
           {['All', ...filterTags].map((tag) => (
             <button
               key={tag}
@@ -699,6 +708,49 @@ export default function Tasks() {
           >
             <span className="material-symbols-outlined text-[14px]">settings</span>
           </button>
+        </div>
+
+        {/* Priority + due date filters */}
+        <div className="flex gap-2 px-4 pb-2.5 overflow-x-auto no-scrollbar">
+          {/* Priority chips */}
+          {[
+            { value: 'all', label: 'All', color: '' },
+            { value: 'critical', label: '🔴 Emergency', color: 'text-red-700 bg-red-50 border-red-300' },
+            { value: 'high', label: '🟠 High', color: 'text-orange-700 bg-orange-50 border-orange-300' },
+            { value: 'medium', label: '🟡 Medium', color: 'text-amber-700 bg-amber-50 border-amber-300' },
+            { value: 'low', label: '🔵 Low', color: 'text-blue-700 bg-blue-50 border-blue-300' },
+          ].map(({ value, label, color }) => (
+            <button
+              key={value}
+              onClick={() => setFilterPriority(value)}
+              className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
+                filterPriority === value
+                  ? value === 'all' ? 'bg-on-surface text-surface border-on-surface' : color + ' ring-1 ring-current/30'
+                  : 'border-outline-variant text-on-surface-variant hover:border-outline'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <div className="w-px bg-outline-variant/40 self-stretch shrink-0" />
+          {/* Due date chips */}
+          {[
+            { value: 'all' as const, label: 'Any date' },
+            { value: 'overdue' as const, label: '⚠ Overdue' },
+            { value: 'week' as const, label: '📅 This week' },
+          ].map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setFilterDue(value)}
+              className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
+                filterDue === value
+                  ? value === 'overdue' ? 'bg-red-100 text-red-700 border-red-300' : value === 'week' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-on-surface text-surface border-on-surface'
+                  : 'border-outline-variant text-on-surface-variant hover:border-outline'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -12,8 +12,11 @@ const NAV_ITEMS = [
 
 export default function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-t border-outline-variant/20 shadow-nav">
-      <div className="flex justify-around items-center h-16 px-1 max-w-screen-xl mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-t border-outline-variant/20 shadow-nav"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
+    >
+      <div className="flex justify-around items-center h-16 px-1 max-w-screen-xl mx-auto">
         {NAV_ITEMS.map(({ to, label, icon, iconFill }) => (
           <NavLink
             key={to}

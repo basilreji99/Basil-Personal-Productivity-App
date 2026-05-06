@@ -5,27 +5,94 @@ import NoteModal from '../components/notes/NoteModal';
 import TagManager from '../components/ui/TagManager';
 import { useNotesStore } from '../store/notesStore';
 import { useTagStore } from '../store/tagStore';
-import type { Note } from '../types';
+import type { Note, NoteFolder } from '../types';
+
+function FolderModal({
+  folder,
+  onSave,
+  onClose,
+}: {
+  folder?: NoteFolder | null;
+  onSave: (name: string, emoji: string) => void;
+  onClose: () => void;
+}) {
+  const EMOJIS = ['📁', '📚', '💡', '🎯', '🔖', '🗂️', '📝', '💼', '🌟', '🔬', '🎨', '🏠'];
+  const [name, setName] = useState(folder?.name ?? '');
+  const [emoji, setEmoji] = useState(folder?.emoji ?? '📁');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+      <div
+        className="w-full bg-surface-container-lowest rounded-t-2xl p-5 space-y-4"
+        style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="font-inter font-semibold text-sm text-on-surface">
+          {folder ? 'Edit Folder' : 'New Folder'}
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => setEmoji(e)}
+              className={`w-9 h-9 text-xl rounded-lg flex items-center justify-center transition-all ${emoji === e ? 'bg-primary/15 ring-1 ring-primary/40' : 'hover:bg-surface-container'}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+        <input
+          autoFocus
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Folder name"
+          className="w-full px-4 py-2.5 bg-surface-container rounded-lg font-work-sans text-base text-on-surface outline-none border border-outline-variant/30 focus:border-primary/40 placeholder:text-outline/50"
+        />
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-outline-variant font-inter text-sm text-on-surface-variant">
+            Cancel
+          </button>
+          <button
+            onClick={() => { if (name.trim()) { onSave(name.trim(), emoji); onClose(); } }}
+            disabled={!name.trim()}
+            className="flex-1 py-3 rounded-xl bg-primary text-on-primary font-inter font-semibold text-sm disabled:opacity-40"
+          >
+            {folder ? 'Save' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Notes() {
-  const { notes, addNote, updateNote, deleteNote, togglePin } = useNotesStore();
+  const { notes, addNote, updateNote, deleteNote, togglePin, folders, addFolder, updateFolder, deleteFolder } = useNotesStore();
   const pinnedTags = useTagStore(s => s.pinned);
   const tagUsage = useTagStore(s => s.usage);
   const filterTags = useMemo(() => {
     if (pinnedTags.length > 0) return pinnedTags;
     return Object.entries(tagUsage).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [pinnedTags, tagUsage]);
+
+  const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = All
   const [activeTag, setActiveTag] = useState<string>('All');
   const [modalOpen, setModalOpen] = useState(false);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [editNote, setEditNote] = useState<Note | null>(null);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [editFolder, setEditFolder] = useState<NoteFolder | null>(null);
+  const [folderMenuId, setFolderMenuId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    const list = activeTag === 'All' ? notes : notes.filter((n) => n.tags.includes(activeTag));
+    let list = activeFolder === null
+      ? notes
+      : notes.filter((n) => n.folderId === activeFolder);
+    if (activeTag !== 'All') list = list.filter((n) => n.tags.includes(activeTag));
     const pinned = list.filter((n) => n.pinned);
     const unpinned = list.filter((n) => !n.pinned);
     return [...pinned, ...unpinned];
-  }, [notes, activeTag]);
+  }, [notes, activeFolder, activeTag]);
 
   const handleEdit = (note: Note) => {
     setEditNote(note);
@@ -36,7 +103,7 @@ export default function Notes() {
     if (editNote) {
       updateNote(editNote.id, data);
     } else {
-      addNote(data);
+      addNote({ ...data, folderId: activeFolder });
     }
     setEditNote(null);
   };
@@ -48,9 +115,77 @@ export default function Notes() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Notes" />
+      <TopBar
+        title="Notes"
+        rightSlot={
+          <button onClick={() => setTagManagerOpen(true)} className="p-1.5 rounded-xl text-on-surface-variant">
+            <span className="material-symbols-outlined text-[20px]">label</span>
+          </button>
+        }
+      />
 
-      {/* Filter tabs */}
+      {/* Folder bar */}
+      <div className="bg-background/90 backdrop-blur-sm border-b border-outline-variant/20">
+        <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar items-center">
+          <button
+            onClick={() => { setActiveFolder(null); setActiveTag('All'); }}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter font-semibold text-xs border transition-all ${
+              activeFolder === null ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[13px]">notes</span>
+            All
+          </button>
+          {folders.map((folder) => (
+            <div key={folder.id} className="relative flex-shrink-0">
+              <button
+                onClick={() => { setActiveFolder(folder.id); setActiveTag('All'); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter font-semibold text-xs border transition-all ${
+                  activeFolder === folder.id ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+                }`}
+              >
+                <span className="text-sm leading-none">{folder.emoji}</span>
+                {folder.name}
+                {activeFolder === folder.id && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setFolderMenuId(folder.id); }}
+                    className="ml-0.5 opacity-70 hover:opacity-100"
+                  >
+                    <span className="material-symbols-outlined text-[12px]">more_vert</span>
+                  </button>
+                )}
+              </button>
+              {folderMenuId === folder.id && (
+                <div className="absolute top-full left-0 mt-1 bg-surface-container-lowest rounded-xl shadow-modal border border-outline-variant/20 z-40 min-w-[140px] overflow-hidden">
+                  <button
+                    onClick={() => { setEditFolder(folder); setFolderModalOpen(true); setFolderMenuId(null); }}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-on-surface hover:bg-surface-container text-left"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => { deleteFolder(folder.id); setFolderMenuId(null); if (activeFolder === folder.id) setActiveFolder(null); }}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-error hover:bg-error/5 text-left"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={() => { setEditFolder(null); setFolderModalOpen(true); }}
+            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-outline-variant text-on-surface-variant font-inter text-xs hover:border-primary/40 transition-all"
+          >
+            <span className="material-symbols-outlined text-[13px]">create_new_folder</span>
+            New folder
+          </button>
+        </div>
+      </div>
+
+      {/* Tag filter row */}
       <div className="sticky top-14 z-30 bg-background/90 backdrop-blur-sm border-b border-outline-variant/20">
         <div className="flex gap-2 px-4 py-2.5 overflow-x-auto no-scrollbar">
           {['All', ...filterTags].map((tag) => (
@@ -66,15 +201,13 @@ export default function Notes() {
               {tag}
             </button>
           ))}
-          <button
-            onClick={() => setTagManagerOpen(true)}
-            className="flex-shrink-0 flex items-center px-2.5 py-1.5 rounded-full border border-outline-variant text-on-surface-variant hover:border-primary/40 transition-all"
-            title="Manage tags"
-          >
-            <span className="material-symbols-outlined text-[16px]">settings</span>
-          </button>
         </div>
       </div>
+
+      {/* Backdrop to close folder menu */}
+      {folderMenuId && (
+        <div className="fixed inset-0 z-30" onClick={() => setFolderMenuId(null)} />
+      )}
 
       <main className="max-w-screen-xl mx-auto px-4 py-4">
         {filtered.length === 0 ? (
@@ -132,6 +265,18 @@ export default function Notes() {
       />
 
       <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
+
+      {folderModalOpen && (
+        <FolderModal
+          folder={editFolder}
+          onSave={(name, emoji) => {
+            if (editFolder) updateFolder(editFolder.id, { name, emoji });
+            else addFolder(name, emoji);
+            setEditFolder(null);
+          }}
+          onClose={() => { setFolderModalOpen(false); setEditFolder(null); }}
+        />
+      )}
     </div>
   );
 }

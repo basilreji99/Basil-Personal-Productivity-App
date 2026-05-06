@@ -2,17 +2,55 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import { useSyncStore } from '../../store/syncStore';
+import { useThemeStore } from '../../store/themeStore';
 
-const PULL_THRESHOLD = 72; // px to drag before triggering refresh
+const PULL_THRESHOLD = 72;
 
 export default function AppShell() {
   const syncNow = useSyncStore((s) => s.syncNow);
   const syncStatus = useSyncStore((s) => s.syncStatus);
+  const startAuth = useSyncStore((s) => s.startAuth);
+  const profile = useSyncStore((s) => s.profile);
+  const isTokenValid = useSyncStore((s) => s.isTokenValid);
+  const { mode, resolvedDark } = useThemeStore();
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const startY = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Apply dark class to <html>
+  useEffect(() => {
+    const applyTheme = () => {
+      document.documentElement.classList.toggle('dark', resolvedDark());
+    };
+    applyTheme();
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', applyTheme);
+    return () => mq.removeEventListener('change', applyTheme);
+  }, [mode]);
+
+  // Track online/offline status
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  // Detect when Google session expires mid-use
+  useEffect(() => {
+    const check = () => setSessionExpired(!!profile && !isTokenValid());
+    check();
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, [profile, isTokenValid]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -27,7 +65,6 @@ export default function AppShell() {
       if (startY.current === null) return;
       const delta = e.touches[0].clientY - startY.current;
       if (delta <= 0) { setPullDistance(0); return; }
-      // Resist the pull (rubber-band feel)
       setPullDistance(Math.min(delta * 0.4, PULL_THRESHOLD + 16));
       if (delta > 10) e.preventDefault();
     }
@@ -37,9 +74,7 @@ export default function AppShell() {
         setRefreshing(true);
         const { isTokenValid } = useSyncStore.getState();
         if (isTokenValid()) {
-          syncNow().finally(() => {
-            setRefreshing(false);
-          });
+          syncNow().finally(() => setRefreshing(false));
         } else {
           setRefreshing(false);
         }
@@ -65,6 +100,36 @@ export default function AppShell() {
 
   return (
     <div className="flex flex-col min-h-dvh bg-background">
+      {/* Offline banner */}
+      {!isOnline && (
+        <div className="flex items-center justify-center gap-2 bg-amber-500 text-white px-4 py-2 text-xs font-inter font-semibold z-50">
+          <span className="material-symbols-outlined text-[14px]">wifi_off</span>
+          You're offline — changes will sync when reconnected
+        </div>
+      )}
+
+      {/* Session expired banner */}
+      {sessionExpired && (
+        <button
+          onClick={startAuth}
+          className="flex w-full items-center justify-center gap-2 bg-amber-500 text-white px-4 py-2 text-xs font-inter font-semibold z-50"
+        >
+          <span className="material-symbols-outlined text-[14px]">lock_clock</span>
+          Google session expired — tap to reconnect
+        </button>
+      )}
+
+      {/* Sync error banner */}
+      {isOnline && !sessionExpired && syncStatus === 'error' && (
+        <button
+          onClick={() => syncNow()}
+          className="flex w-full items-center justify-center gap-2 bg-error/90 text-on-error px-4 py-1.5 text-xs font-inter font-medium z-50"
+        >
+          <span className="material-symbols-outlined text-[14px]">sync_problem</span>
+          Sync failed — tap to retry
+        </button>
+      )}
+
       {/* Pull-to-refresh indicator */}
       <div
         className="flex items-center justify-center overflow-hidden transition-all duration-200"
@@ -81,7 +146,7 @@ export default function AppShell() {
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto"
-        style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(96px + max(env(safe-area-inset-bottom, 0px), 10px))' }}
       >
         <Outlet />
       </div>

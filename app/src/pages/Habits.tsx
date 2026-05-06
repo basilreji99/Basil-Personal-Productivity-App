@@ -177,9 +177,11 @@ export default function Habits() {
   const store = useHabitsStore();
   const {
     habits, toggleEntry, setEntryNotes, getEntryNotes,
+    getLongestStreak, getCompletionRate,
     isCompleted, getStreak, getWeekEntries, getWeekCompletionCount, getMonthCompletionCount,
     addHabit, updateHabit, deleteHabit,
   } = store;
+
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editHabit, setEditHabit] = useState<Habit | null>(null);
@@ -405,12 +407,15 @@ export default function Habits() {
                         })}
                       </div>
 
-                      {/* History toggle */}
+                      {/* Heatmap toggle */}
                       <button
                         onClick={() => setExpandedHistory(isExpanded ? null : habit.id)}
                         className="mt-3 w-full flex items-center justify-between font-inter text-xs text-on-surface-variant"
                       >
-                        <span>History (12 weeks)</span>
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">grid_view</span>
+                          Streak heatmap
+                        </span>
                         <span className="material-symbols-outlined text-[16px]">
                           {isExpanded ? 'expand_less' : 'expand_more'}
                         </span>
@@ -418,28 +423,43 @@ export default function Habits() {
 
                       {isExpanded && (() => {
                         const dailyRows = getDailyHistory(habit.id);
+                        const rate = Math.round(getCompletionRate(habit.id, 84) * 100);
+                        const longest = getLongestStreak(habit.id);
                         return (
                           <div className="mt-2">
-                            <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: '28px repeat(7, minmax(0, 1fr))' }}>
-                              <div />
-                              {DAY_LABELS.map((d, i) => (
-                                <div key={i} className="font-inter text-[9px] text-outline text-center">{d}</div>
+                            {/* Stats row */}
+                            <div className="flex gap-3 mb-3">
+                              {[
+                                { label: 'Current', value: `${getStreak(habit.id)}d` },
+                                { label: 'Longest', value: `${longest}d` },
+                                { label: '12-wk rate', value: `${rate}%` },
+                              ].map((s) => (
+                                <div key={s.label} className={`flex-1 text-center py-1.5 rounded-lg ${HABIT_LIGHT[habit.color]}`}>
+                                  <p className={`font-inter font-bold text-sm ${HABIT_TEXT[habit.color]}`}>{s.value}</p>
+                                  <p className="font-inter text-[9px] text-on-surface-variant uppercase tracking-wide">{s.label}</p>
+                                </div>
                               ))}
                             </div>
+                            {/* Day-of-week header */}
+                            <div className="grid gap-0.5 mb-0.5" style={{ gridTemplateColumns: '22px repeat(7, minmax(0, 1fr))' }}>
+                              <div />
+                              {DAY_LABELS.map((d, i) => (
+                                <div key={i} className="font-inter text-[8px] text-outline text-center">{d}</div>
+                              ))}
+                            </div>
+                            {/* Week rows */}
                             {dailyRows.map((week, wi) => {
                               const prevWeek = dailyRows[wi - 1];
                               const newMonth = !prevWeek || prevWeek.weekStart.getMonth() !== week.weekStart.getMonth();
                               return (
                                 <div key={wi}>
                                   {newMonth && (
-                                    <div className="flex items-center gap-2 mt-2 mb-1" style={{ gridTemplateColumns: '28px 1fr' }}>
-                                      <span className="font-inter text-[9px] font-semibold text-outline uppercase tracking-wide" style={{ paddingLeft: '30px' }}>
-                                        {MONTHS[week.weekStart.getMonth()]} {week.weekStart.getFullYear()}
-                                      </span>
-                                    </div>
+                                    <p className="font-inter text-[9px] font-semibold text-outline uppercase tracking-wide mt-1.5 mb-0.5" style={{ paddingLeft: '26px' }}>
+                                      {MONTHS[week.weekStart.getMonth()]}
+                                    </p>
                                   )}
-                                  <div className="grid gap-1 mb-0.5 items-center" style={{ gridTemplateColumns: '28px repeat(7, minmax(0, 1fr))' }}>
-                                    <span className="font-inter text-[9px] text-outline text-right pr-0.5 whitespace-nowrap">
+                                  <div className="grid gap-0.5 mb-0.5 items-center" style={{ gridTemplateColumns: '22px repeat(7, minmax(0, 1fr))' }}>
+                                    <span className="font-inter text-[8px] text-outline text-right pr-0.5 whitespace-nowrap leading-none">
                                       {week.weekStart.getDate()}
                                     </span>
                                     {week.days.map((day, di) => (
@@ -448,17 +468,29 @@ export default function Habits() {
                                         onClick={() => day.completed && !day.isFuture && setDayDetail({ habit, date: day.date })}
                                         disabled={!day.completed || day.isFuture}
                                         title={day.notes ? `${day.date}: ${day.notes}` : day.date}
-                                        className={`h-5 w-full rounded-sm ${
+                                        className={`aspect-square w-full rounded-sm transition-opacity ${
                                           day.isFuture ? 'bg-surface-container opacity-20' :
-                                          day.completed ? `${HABIT_BG[habit.color]} opacity-90 active:opacity-70` :
-                                          'bg-surface-container'
+                                          day.completed ? `${HABIT_BG[habit.color]} opacity-90 hover:opacity-100` :
+                                          'bg-surface-container-high opacity-60'
                                         }`}
-                                      />
+                                      >
+                                        {day.completed && day.notes && (
+                                          <span className="block w-1 h-1 rounded-full bg-amber-300 mx-auto" />
+                                        )}
+                                      </button>
                                     ))}
                                   </div>
                                 </div>
                               );
                             })}
+                            {/* Legend */}
+                            <div className="flex items-center gap-1 mt-2 justify-end">
+                              <span className="font-inter text-[9px] text-outline">Less</span>
+                              <div className="bg-surface-container-high opacity-60 w-3 h-3 rounded-sm" />
+                              <div className={`${HABIT_BG[habit.color]} opacity-50 w-3 h-3 rounded-sm`} />
+                              <div className={`${HABIT_BG[habit.color]} opacity-90 w-3 h-3 rounded-sm`} />
+                              <span className="font-inter text-[9px] text-outline">More</span>
+                            </div>
                           </div>
                         );
                       })()}

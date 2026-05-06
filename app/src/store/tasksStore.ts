@@ -296,7 +296,7 @@ export const useTasksStore = create<TasksState>()(
     {
       name: 'productivity-tasks',
       version: 2,
-      migrate(persisted: unknown, version: number) {
+      migrate(persisted: unknown, _version: number) {
         const s = persisted as { tasks?: any[]; columns?: TaskColumn[] } | null;
         const tasks = (s?.tasks ?? []).map((t: any) => ({
           ...t,

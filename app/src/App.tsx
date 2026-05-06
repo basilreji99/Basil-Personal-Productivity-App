@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import Onboarding from './components/Onboarding';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
@@ -225,8 +226,18 @@ function OAuthHandler() {
 }
 
 export default function App() {
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem('basil-onboarded'),
+  );
+
+  function handleOnboardingDone() {
+    localStorage.setItem('basil-onboarded', '1');
+    setShowOnboarding(false);
+  }
+
   return (
     <HashRouter>
+      {showOnboarding && <Onboarding onDone={handleOnboardingDone} />}
       <OAuthHandler />
       <Routes>
         <Route element={<AppShell />}>

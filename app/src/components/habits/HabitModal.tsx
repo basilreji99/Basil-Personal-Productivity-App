@@ -44,6 +44,7 @@ export default function HabitModal({ open, onClose, onSave, habit }: HabitModalP
   const [targetDays, setTargetDays] = useState(3);
   const [hasNotes, setHasNotes] = useState(false);
   const [notesPrompt, setNotesPrompt] = useState('');
+  const [reminderTime, setReminderTime] = useState('');
 
   useEffect(() => {
     if (habit) {
@@ -55,6 +56,7 @@ export default function HabitModal({ open, onClose, onSave, habit }: HabitModalP
       setTargetDays(habit.targetDays);
       setHasNotes(habit.hasNotes);
       setNotesPrompt(habit.notesPrompt ?? '');
+      setReminderTime(habit.reminderTime ?? '');
     } else {
       setName('');
       setDescription('');
@@ -64,6 +66,7 @@ export default function HabitModal({ open, onClose, onSave, habit }: HabitModalP
       setTargetDays(3);
       setHasNotes(false);
       setNotesPrompt('');
+      setReminderTime('');
     }
   }, [habit, open]);
 
@@ -85,6 +88,7 @@ export default function HabitModal({ open, onClose, onSave, habit }: HabitModalP
       targetDays,
       hasNotes,
       notesPrompt: hasNotes ? notesPrompt.trim() || undefined : undefined,
+      reminderTime: reminderTime.trim() || undefined,
     });
     onClose();
   };
@@ -178,6 +182,33 @@ export default function HabitModal({ open, onClose, onSave, habit }: HabitModalP
               className="w-full px-3 py-2 bg-surface-container rounded-lg font-inter text-sm text-on-surface outline-none border border-outline-variant/30 focus:border-primary/40 placeholder:text-outline/50"
             />
           )}
+        </div>
+
+        {/* Reminder time */}
+        <div className="space-y-1.5">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px]">notifications</span>
+            Daily reminder (optional)
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={(e) => setReminderTime(e.target.value)}
+              className="flex-1 px-3 py-2 bg-surface-container rounded-lg font-inter text-sm text-on-surface outline-none border border-outline-variant/30 focus:border-primary/40"
+            />
+            {reminderTime && (
+              <button
+                onClick={() => setReminderTime('')}
+                className="font-inter text-xs text-outline hover:text-error transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="font-inter text-[10px] text-outline">
+            You'll get a push notification at this time if the habit isn't done yet.
+          </p>
         </div>
 
         {/* Color */}
