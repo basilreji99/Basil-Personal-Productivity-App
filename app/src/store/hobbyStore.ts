@@ -174,24 +174,37 @@ export const useHobbyStore = create<HobbyState>()(
 
       ensureSpotifyToken: async () => {
         const { spotifyToken, spotifyExpiry, spotifyRefreshToken } = get();
-        // Token still valid (with 60s buffer)
+        // Token still valid with 60s buffer
         if (spotifyToken && spotifyExpiry && Date.now() < spotifyExpiry - 60_000) {
           return spotifyToken;
         }
-        // Try silent refresh
         if (spotifyRefreshToken) {
-          const result = await refreshSpotifyToken(spotifyRefreshToken);
-          if (result) {
-            set({
-              spotifyToken: result.token,
-              spotifyExpiry: result.expiry,
-              ...(result.refreshToken ? { spotifyRefreshToken: result.refreshToken } : {}),
-            });
-            return result.token;
+          try {
+            const result = await refreshSpotifyToken(spotifyRefreshToken);
+            if (result) {
+              // Success — store new token (keep old refresh token if Spotify didn't rotate it)
+              set({
+                spotifyToken: result.token,
+                spotifyExpiry: result.expiry,
+                ...(result.refreshToken ? { spotifyRefreshToken: result.refreshToken } : {}),
+              });
+              return result.token;
+            }
+            // null = 400/401: refresh token is definitively revoked → force re-auth
+            set({ spotifyToken: null, spotifyExpiry: null, spotifyRefreshToken: null });
+            return null;
+          } catch {
+            // Network / server error — keep the refresh token so we can retry later.
+            // Return the slightly-expired token within a 5-minute grace window so
+            // an offline blip doesn't immediately boot the user out.
+            if (spotifyToken && spotifyExpiry && Date.now() < spotifyExpiry + 5 * 60_000) {
+              return spotifyToken;
+            }
+            return null;
           }
         }
-        // Refresh failed — clear so user sees connect screen
-        set({ spotifyToken: null, spotifyExpiry: null, spotifyRefreshToken: null });
+        // No refresh token at all
+        set({ spotifyToken: null, spotifyExpiry: null });
         return null;
       },
     }),

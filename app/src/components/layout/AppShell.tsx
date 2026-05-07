@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import { useSyncStore } from '../../store/syncStore';
+import { useHobbyStore } from '../../store/hobbyStore';
+import { openSpotifyAuth } from '../../services/spotifyAuth';
 import { useThemeStore } from '../../store/themeStore';
 
 const PULL_THRESHOLD = 72;
@@ -14,6 +16,9 @@ export default function AppShell() {
   const isTokenValid = useSyncStore((s) => s.isTokenValid);
   const { mode, resolvedDark } = useThemeStore();
   const [sessionExpired, setSessionExpired] = useState(false);
+  const spotifyToken = useHobbyStore((s) => s.spotifyToken);
+  const isSpotifyValid = useHobbyStore((s) => s.isSpotifyValid);
+  const [spotifyExpired, setSpotifyExpired] = useState(false);
 
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,13 +49,16 @@ export default function AppShell() {
     };
   }, []);
 
-  // Detect when Google session expires mid-use
+  // Detect when Google or Spotify session expires mid-use
   useEffect(() => {
-    const check = () => setSessionExpired(!!profile && !isTokenValid());
+    const check = () => {
+      setSessionExpired(!!profile && !isTokenValid());
+      setSpotifyExpired(!!spotifyToken && !isSpotifyValid());
+    };
     check();
     const id = setInterval(check, 60_000);
     return () => clearInterval(id);
-  }, [profile, isTokenValid]);
+  }, [profile, isTokenValid, spotifyToken, isSpotifyValid]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -108,7 +116,7 @@ export default function AppShell() {
         </div>
       )}
 
-      {/* Session expired banner */}
+      {/* Session expired banners */}
       {sessionExpired && (
         <button
           onClick={startAuth}
@@ -116,6 +124,15 @@ export default function AppShell() {
         >
           <span className="material-symbols-outlined text-[14px]">lock_clock</span>
           Google session expired — tap to reconnect
+        </button>
+      )}
+      {spotifyExpired && (
+        <button
+          onClick={openSpotifyAuth}
+          className="flex w-full items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 text-xs font-inter font-semibold z-50"
+        >
+          <span className="material-symbols-outlined text-[14px]">music_note</span>
+          Spotify session expired — tap to reconnect
         </button>
       )}
 

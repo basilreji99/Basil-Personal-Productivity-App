@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/layout/TopBar';
 import { useHobbyStore } from '../store/hobbyStore';
 import { useFitnessStore } from '../store/fitnessStore';
+import { useBooksStore } from '../store/booksStore';
 
 const CATEGORIES = [
   {
@@ -10,8 +11,8 @@ const CATEGORIES = [
     label: 'Music',
     description: 'Spotify stats and listening history',
     color: '#22c55e',
-    bg: 'bg-green-50',
-    border: 'border-green-100',
+    bg: 'bg-green-50 dark:bg-green-950/30',
+    border: 'border-green-100 dark:border-green-900/50',
   },
   {
     path: '/hobbies/drawing',
@@ -19,8 +20,8 @@ const CATEGORIES = [
     label: 'Drawing & Painting',
     description: 'Artwork gallery and progress',
     color: '#8b5cf6',
-    bg: 'bg-violet-50',
-    border: 'border-violet-100',
+    bg: 'bg-violet-50 dark:bg-violet-950/30',
+    border: 'border-violet-100 dark:border-violet-900/50',
   },
   {
     path: '/hobbies/movies',
@@ -28,8 +29,8 @@ const CATEGORIES = [
     label: 'Movies & Series',
     description: 'Reviews, ratings, and watchlist',
     color: '#ef4444',
-    bg: 'bg-red-50',
-    border: 'border-red-100',
+    bg: 'bg-red-50 dark:bg-red-950/30',
+    border: 'border-red-100 dark:border-red-900/50',
   },
   {
     path: '/hobbies/fitness',
@@ -37,8 +38,17 @@ const CATEGORIES = [
     label: 'Fitness & Sports',
     description: 'Gym sessions and sports history',
     color: '#f97316',
-    bg: 'bg-orange-50',
-    border: 'border-orange-100',
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    border: 'border-orange-100 dark:border-orange-900/50',
+  },
+  {
+    path: '/hobbies/books',
+    icon: 'menu_book',
+    label: 'Books',
+    description: 'Reviews, ratings, and reading list',
+    color: '#06b6d4',
+    bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+    border: 'border-cyan-100 dark:border-cyan-900/50',
   },
 ];
 
@@ -46,12 +56,14 @@ export default function Hobbies() {
   const navigate = useNavigate();
   const { reviews, watchlist, artworks } = useHobbyStore();
   const { gymSessions, sportSessions } = useFitnessStore();
+  const { reviews: bookReviews, readingList } = useBooksStore();
 
   const counts = [
     reviews.length > 0 ? `${reviews.filter(r => r.rating >= 8).length} highly rated` : 'No data yet',
     `${artworks.length} pieces`,
     `${reviews.length} reviews · ${watchlist.length} watchlist`,
     `${gymSessions.length} gym · ${sportSessions.length} sport`,
+    `${bookReviews.length} reviews · ${readingList.length} to read`,
   ];
 
   return (

@@ -128,9 +128,9 @@ export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col">
+    <div className="fixed inset-0 z-[60] flex flex-col">
       <div className="absolute inset-0 bg-inverse-surface/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mt-12 mx-4 max-w-lg mx-auto w-full bg-surface-container-lowest rounded-2xl shadow-modal overflow-hidden animate-scale-in">
+      <div className="relative mx-4 max-w-lg mx-auto w-full bg-surface-container-lowest rounded-2xl shadow-modal overflow-hidden animate-scale-in" style={{ marginTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
         {/* Search Input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant/20">
           <span className="material-symbols-outlined text-[22px] text-on-surface-variant">search</span>

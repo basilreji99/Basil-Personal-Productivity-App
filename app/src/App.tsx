@@ -18,7 +18,9 @@ import Movies from './pages/hobbies/Movies';
 import Music from './pages/hobbies/Music';
 import Drawing from './pages/hobbies/Drawing';
 import Fitness from './pages/hobbies/Fitness';
+import Books from './pages/hobbies/Books';
 import { useFitnessStore } from './store/fitnessStore';
+import { useBooksStore } from './store/booksStore';
 import { parseTokenFromHash } from './services/googleAuth';
 import { exchangeSpotifyCode } from './services/spotifyAuth';
 import { useHobbyStore } from './store/hobbyStore';
@@ -195,7 +197,7 @@ function OAuthHandler() {
   useEffect(() => {
     const stores = [
       useTasksStore, useNotesStore, useHabitsStore, useFinanceStore,
-      useHealthStore, useHobbyStore, useFitnessStore,
+      useHealthStore, useHobbyStore, useFitnessStore, useBooksStore,
     ] as const;
     const unsubs = stores.map(store => store.subscribe(() => markLocalDirty()));
     return () => unsubs.forEach(fn => fn());
@@ -217,6 +219,7 @@ function OAuthHandler() {
     useCalendarStore.persist.rehydrate();
     useHobbyStore.persist.rehydrate();
     useFitnessStore.persist.rehydrate();
+    useBooksStore.persist.rehydrate();
     useSprintStore.persist.rehydrate();
     // Allow dirty marking again after stores have settled
     setTimeout(() => setSuppressDirtyMark(false), 1000);
@@ -254,6 +257,7 @@ export default function App() {
           <Route path="/hobbies/music" element={<Music />} />
           <Route path="/hobbies/drawing" element={<Drawing />} />
           <Route path="/hobbies/fitness" element={<Fitness />} />
+          <Route path="/hobbies/books" element={<Books />} />
         </Route>
       </Routes>
     </HashRouter>

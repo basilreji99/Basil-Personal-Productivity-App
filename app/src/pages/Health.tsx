@@ -310,7 +310,8 @@ function LogModal({ open, onClose, measurement }: {
 
   return (
     <Modal open={open} onClose={onClose} title={measurement ? 'Edit Measurement' : 'Log Measurement'} size="sm">
-      <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      <div className="flex flex-col">
+      <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
         <div className="space-y-1">
           <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
@@ -355,7 +356,8 @@ function LogModal({ open, onClose, measurement }: {
             className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/50" />
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        </div>
+        <div className="flex justify-between items-center px-5 py-4 border-t border-outline-variant/20 shrink-0">
           {measurement ? (
             confirmDelete ? (
               <div className="flex items-center gap-2">

@@ -88,50 +88,53 @@ function GymLogModal({ open, onClose, session }: {
 
   return (
     <Modal open={open} onClose={onClose} title={session ? 'Edit Session' : 'Log Gym Session'} size="sm">
-      <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-        </div>
+      <div className="flex flex-col">
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
+          </div>
 
-        <div className="space-y-1.5">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Workout Type</label>
-          <div className="flex flex-wrap gap-1.5">
-            {GYM_TYPES.map(t => (
-              <button key={t} onClick={() => setType(t)}
-                className="px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors"
-                style={type === t ? { background: colorFor(t, TYPE_COLORS), color: '#fff' } : {}}>
-                <span className={type !== t ? 'text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full' : ''}>
-                  {t}
-                </span>
+          <div className="space-y-1.5">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Workout Type</label>
+            <div className="flex flex-wrap gap-1.5">
+              {GYM_TYPES.map(t => (
+                <button key={t} onClick={() => setType(t)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors"
+                  style={type === t ? { background: colorFor(t, TYPE_COLORS), color: '#fff' } : {}}>
+                  <span className={type !== t ? 'text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full' : ''}>
+                    {t}
+                  </span>
+                </button>
+              ))}
+              <button onClick={() => setType('__custom__')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors ${type === '__custom__' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                Custom
               </button>
-            ))}
-            <button onClick={() => setType('__custom__')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors ${type === '__custom__' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-              Custom
-            </button>
+            </div>
+            {type === '__custom__' && (
+              <input value={customType} onChange={e => setCustom(e.target.value)} placeholder="e.g. Upper Body"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            )}
           </div>
-          {type === '__custom__' && (
-            <input value={customType} onChange={e => setCustom(e.target.value)} placeholder="e.g. Upper Body"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-          )}
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Duration (min)</label>
-            <input type="number" value={duration} onChange={e => setDur(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-          </div>
-          <div className="space-y-1">
-            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Duration (min)</label>
+              <input type="number" value={duration} onChange={e => setDur(e.target.value)} placeholder="optional"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            </div>
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notes</label>
+              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        {/* Action buttons — always visible outside scrollable area */}
+        <div className="flex justify-between items-center px-5 py-4 border-t border-outline-variant/20 shrink-0">
           {session ? (
             confirmDel ? (
               <div className="flex items-center gap-2">
@@ -197,50 +200,53 @@ function SportLogModal({ open, onClose, session }: {
 
   return (
     <Modal open={open} onClose={onClose} title={session ? 'Edit Session' : 'Log Sport Session'} size="sm">
-      <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-        </div>
+      <div className="flex flex-col">
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
+          </div>
 
-        <div className="space-y-1.5">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Sport</label>
-          <div className="flex flex-wrap gap-1.5">
-            {SPORT_OPTIONS.slice(0, -1).map(s => (
-              <button key={s} onClick={() => setSport(s)}
-                className="px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors"
-                style={sport === s ? { background: colorFor(s, SPORT_COLORS), color: '#fff' } : {}}>
-                <span className={sport !== s ? 'text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full' : ''}>
-                  {s}
-                </span>
+          <div className="space-y-1.5">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Sport</label>
+            <div className="flex flex-wrap gap-1.5">
+              {SPORT_OPTIONS.slice(0, -1).map(s => (
+                <button key={s} onClick={() => setSport(s)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors"
+                  style={sport === s ? { background: colorFor(s, SPORT_COLORS), color: '#fff' } : {}}>
+                  <span className={sport !== s ? 'text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full' : ''}>
+                    {s}
+                  </span>
+                </button>
+              ))}
+              <button onClick={() => setSport('__custom__')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors ${sport === '__custom__' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                Other
               </button>
-            ))}
-            <button onClick={() => setSport('__custom__')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors ${sport === '__custom__' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-              Other
-            </button>
+            </div>
+            {sport === '__custom__' && (
+              <input value={customSport} onChange={e => setCustom(e.target.value)} placeholder="Sport name"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            )}
           </div>
-          {sport === '__custom__' && (
-            <input value={customSport} onChange={e => setCustom(e.target.value)} placeholder="Sport name"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-          )}
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Duration (min)</label>
-            <input type="number" value={duration} onChange={e => setDur(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-          </div>
-          <div className="space-y-1">
-            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Duration (min)</label>
+              <input type="number" value={duration} onChange={e => setDur(e.target.value)} placeholder="optional"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            </div>
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notes</label>
+              <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        {/* Action buttons — always visible outside scrollable area */}
+        <div className="flex justify-between items-center px-5 py-4 border-t border-outline-variant/20 shrink-0">
           {session ? (
             confirmDel ? (
               <div className="flex items-center gap-2">

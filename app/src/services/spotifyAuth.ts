@@ -89,7 +89,12 @@ export async function refreshSpotifyToken(refreshToken: string): Promise<{ token
       refresh_token: refreshToken,
     }),
   });
-  if (!res.ok) return null;
+  // 400/401 means the refresh token is definitively invalid or revoked — return null
+  // so the caller knows to clear credentials and ask the user to reconnect.
+  if (res.status === 400 || res.status === 401) return null;
+  // Any other non-OK response (5xx, network hiccup) → throw so the caller can
+  // preserve the refresh token and retry later instead of wiping it.
+  if (!res.ok) throw new Error(`spotify_refresh_${res.status}`);
   const data = await res.json();
   return {
     token: data.access_token,

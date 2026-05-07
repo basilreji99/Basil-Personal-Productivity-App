@@ -164,7 +164,8 @@ function ArtworkModal({ open, onClose, artwork }: { open: boolean; onClose: () =
 
   return (
     <Modal open={open} onClose={onClose} title={artwork ? 'Edit Artwork' : 'Add Artwork'} size="sm">
-      <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      <div className="flex flex-col">
+      <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
         {/* Image upload */}
         <div
           onClick={() => fileRef.current?.click()}
@@ -238,7 +239,8 @@ function ArtworkModal({ open, onClose, artwork }: { open: boolean; onClose: () =
             className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none resize-none" />
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        </div>
+        <div className="flex justify-between items-center px-5 py-4 border-t border-outline-variant/20 shrink-0">
           {artwork ? (
             confirmDelete ? (
               <div className="flex items-center gap-2">
@@ -281,7 +283,7 @@ function ArtworkViewer({
   const src = driveUrl;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-between px-4 py-3 text-white shrink-0">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10">
           <span className="material-symbols-outlined text-[22px]">close</span>

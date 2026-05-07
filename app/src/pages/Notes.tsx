@@ -1,6 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, horizontalListSortingStrategy,
+  useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import TopBar from '../components/layout/TopBar';
-import NoteCard from '../components/notes/NoteCard';
+import NoteCard, { type NoteViewMode } from '../components/notes/NoteCard';
 import NoteModal from '../components/notes/NoteModal';
 import TagManager from '../components/ui/TagManager';
 import { useNotesStore } from '../store/notesStore';
@@ -21,7 +31,7 @@ function FolderModal({
   const [emoji, setEmoji] = useState(folder?.emoji ?? '📁');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end bg-black/40" onClick={onClose}>
       <div
         className="w-full bg-surface-container-lowest rounded-t-2xl p-5 space-y-4"
         style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
@@ -66,8 +76,60 @@ function FolderModal({
   );
 }
 
+// Draggable folder chip with ⋮ menu button
+function SortableFolderChip({
+  folder,
+  isActive,
+  isMenuOpen,
+  onSelect,
+  onMenuClick,
+}: {
+  folder: NoteFolder;
+  isActive: boolean;
+  isMenuOpen: boolean;
+  onSelect: () => void;
+  onMenuClick: (e: React.MouseEvent<HTMLButtonElement>, folder: NoteFolder) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: folder.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="relative flex-shrink-0 flex items-center gap-0.5"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        onClick={onSelect}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter font-semibold text-xs border transition-all cursor-grab active:cursor-grabbing select-none ${
+          isActive
+            ? 'bg-primary text-on-primary border-primary'
+            : 'border-outline-variant/60 text-on-surface-variant bg-surface-container-lowest/60 hover:border-primary/50'
+        }`}
+      >
+        <span className="text-sm leading-none">{folder.emoji}</span>
+        {folder.name}
+      </button>
+      <button
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => onMenuClick(e, folder)}
+        className={`w-5 h-5 flex items-center justify-center rounded-full transition-all ${
+          isMenuOpen
+            ? 'bg-surface-container text-on-surface opacity-100'
+            : 'text-on-surface-variant opacity-40 hover:opacity-100 hover:bg-surface-container'
+        }`}
+      >
+        <span className="material-symbols-outlined text-[14px]">more_vert</span>
+      </button>
+    </div>
+  );
+}
+
 export default function Notes() {
-  const { notes, addNote, updateNote, deleteNote, togglePin, folders, addFolder, updateFolder, deleteFolder } = useNotesStore();
+  const {
+    notes, addNote, updateNote, deleteNote, togglePin,
+    folders, addFolder, updateFolder, deleteFolder, reorderFolders, reorderFolderIds,
+  } = useNotesStore();
   const pinnedTags = useTagStore(s => s.pinned);
   const tagUsage = useTagStore(s => s.usage);
   const filterTags = useMemo(() => {
@@ -75,14 +137,54 @@ export default function Notes() {
     return Object.entries(tagUsage).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [pinnedTags, tagUsage]);
 
-  const [activeFolder, setActiveFolder] = useState<string | null>(null); // null = All
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [activeTag, setActiveTag] = useState<string>('All');
   const [modalOpen, setModalOpen] = useState(false);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [editNote, setEditNote] = useState<Note | null>(null);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editFolder, setEditFolder] = useState<NoteFolder | null>(null);
-  const [folderMenuId, setFolderMenuId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number; folderId: string } | null>(null);
+  const [viewMode, setViewMode] = useState<NoteViewMode>(
+    () => (localStorage.getItem('notes-view') as NoteViewMode) ?? 'masonry',
+  );
+
+  // Close folder menu when user clicks anywhere else
+  useEffect(() => {
+    if (!menuAnchor) return;
+    const handler = () => setMenuAnchor(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [menuAnchor]);
+
+  // DnD sensors for horizontal folder reorder
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  );
+
+  const handleFolderDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = folders.findIndex(f => f.id === active.id);
+    const newIdx = folders.findIndex(f => f.id === over.id);
+    reorderFolderIds(arrayMove(folders, oldIdx, newIdx).map(f => f.id));
+  };
+
+  const handleMenuClick = (e: React.MouseEvent<HTMLButtonElement>, folder: NoteFolder) => {
+    e.stopPropagation();
+    if (menuAnchor?.folderId === folder.id) {
+      setMenuAnchor(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuAnchor({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180), folderId: folder.id });
+    }
+  };
+
+  const cycleView = (mode: NoteViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('notes-view', mode);
+  };
 
   const filtered = useMemo(() => {
     let list = activeFolder === null
@@ -94,108 +196,102 @@ export default function Notes() {
     return [...pinned, ...unpinned];
   }, [notes, activeFolder, activeTag]);
 
-  const handleEdit = (note: Note) => {
-    setEditNote(note);
-    setModalOpen(true);
-  };
+  const handleEdit = (note: Note) => { setEditNote(note); setModalOpen(true); };
 
   const handleSave = (data: Partial<Note>) => {
-    if (editNote) {
-      updateNote(editNote.id, data);
-    } else {
-      addNote({ ...data, folderId: activeFolder });
-    }
-    setEditNote(null);
+    if (editNote) updateNote(editNote.id, data);
+    else addNote({ ...data, folderId: activeFolder });
+    // editNote is cleared by onClose, not here, so auto-save can keep working
   };
 
-  const openNew = () => {
-    setEditNote(null);
-    setModalOpen(true);
-  };
+  const openNew = () => { setEditNote(null); setModalOpen(true); };
+
+  const menuFolder = menuAnchor ? folders.find(f => f.id === menuAnchor.folderId) : null;
+  const menuFolderIdx = menuAnchor ? folders.findIndex(f => f.id === menuAnchor.folderId) : -1;
 
   return (
     <div className="bg-background min-h-screen">
       <TopBar
         title="Notes"
         rightSlot={
-          <button onClick={() => setTagManagerOpen(true)} className="p-1.5 rounded-xl text-on-surface-variant">
-            <span className="material-symbols-outlined text-[20px]">label</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center bg-surface-container rounded-lg p-0.5 gap-0.5">
+              {([
+                { mode: 'list' as NoteViewMode, icon: 'format_list_bulleted', label: 'List' },
+                { mode: 'grid' as NoteViewMode, icon: 'grid_view', label: 'Grid' },
+                { mode: 'masonry' as NoteViewMode, icon: 'view_agenda', label: 'Cards' },
+              ]).map(({ mode, icon, label }) => (
+                <button
+                  key={mode}
+                  onClick={() => cycleView(mode)}
+                  title={label}
+                  className={`p-1 rounded-md transition-all ${viewMode === mode ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setTagManagerOpen(true)} className="p-1.5 rounded-xl text-on-surface-variant">
+              <span className="material-symbols-outlined text-[20px]">label</span>
+            </button>
+          </div>
         }
       />
 
-      {/* Folder bar */}
-      <div className="bg-background/90 backdrop-blur-sm border-b border-outline-variant/20">
-        <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar items-center">
+      {/* Sticky filter section: folder bar + tag chips */}
+      <div className="sticky top-14 z-30 bg-surface-container-low shadow-sm" style={{ top: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
+
+        {/* Folder bar — DnD sortable */}
+        <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar items-center border-b border-outline-variant/25">
+          {/* All button */}
           <button
             onClick={() => { setActiveFolder(null); setActiveTag('All'); }}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter font-semibold text-xs border transition-all ${
-              activeFolder === null ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+              activeFolder === null
+                ? 'bg-primary text-on-primary border-primary'
+                : 'border-outline-variant/60 text-on-surface-variant bg-surface-container-lowest/60 hover:border-primary/50'
             }`}
           >
             <span className="material-symbols-outlined text-[13px]">notes</span>
             All
           </button>
-          {folders.map((folder) => (
-            <div key={folder.id} className="relative flex-shrink-0">
-              <button
-                onClick={() => { setActiveFolder(folder.id); setActiveTag('All'); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-inter font-semibold text-xs border transition-all ${
-                  activeFolder === folder.id ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
-                }`}
-              >
-                <span className="text-sm leading-none">{folder.emoji}</span>
-                {folder.name}
-                {activeFolder === folder.id && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setFolderMenuId(folder.id); }}
-                    className="ml-0.5 opacity-70 hover:opacity-100"
-                  >
-                    <span className="material-symbols-outlined text-[12px]">more_vert</span>
-                  </button>
-                )}
-              </button>
-              {folderMenuId === folder.id && (
-                <div className="absolute top-full left-0 mt-1 bg-surface-container-lowest rounded-xl shadow-modal border border-outline-variant/20 z-40 min-w-[140px] overflow-hidden">
-                  <button
-                    onClick={() => { setEditFolder(folder); setFolderModalOpen(true); setFolderMenuId(null); }}
-                    className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-on-surface hover:bg-surface-container text-left"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                    Rename
-                  </button>
-                  <button
-                    onClick={() => { deleteFolder(folder.id); setFolderMenuId(null); if (activeFolder === folder.id) setActiveFolder(null); }}
-                    className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-error hover:bg-error/5 text-left"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+
+          {/* Sortable folder chips */}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleFolderDragEnd}>
+            <SortableContext items={folders.map(f => f.id)} strategy={horizontalListSortingStrategy}>
+              {folders.map((folder) => (
+                <SortableFolderChip
+                  key={folder.id}
+                  folder={folder}
+                  isActive={activeFolder === folder.id}
+                  isMenuOpen={menuAnchor?.folderId === folder.id}
+                  onSelect={() => { setActiveFolder(folder.id); setActiveTag('All'); }}
+                  onMenuClick={handleMenuClick}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          {/* New folder button */}
           <button
             onClick={() => { setEditFolder(null); setFolderModalOpen(true); }}
-            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-outline-variant text-on-surface-variant font-inter text-xs hover:border-primary/40 transition-all"
+            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-outline-variant/60 text-on-surface-variant font-inter text-xs hover:border-primary/50 transition-all"
           >
             <span className="material-symbols-outlined text-[13px]">create_new_folder</span>
             New folder
           </button>
         </div>
-      </div>
 
-      {/* Tag filter row */}
-      <div className="sticky top-14 z-30 bg-background/90 backdrop-blur-sm border-b border-outline-variant/20">
-        <div className="flex gap-2 px-4 py-2.5 overflow-x-auto no-scrollbar">
+        {/* Tag filter row */}
+        <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar border-b border-outline-variant/25">
           {['All', ...filterTags].map((tag) => (
             <button
               key={tag}
               onClick={() => setActiveTag(tag)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full font-inter font-semibold text-xs uppercase tracking-wide border transition-all duration-200 ${
+              className={`flex-shrink-0 px-3 py-1 rounded-full font-inter font-semibold text-xs uppercase tracking-wide border transition-all duration-200 ${
                 activeTag === tag
                   ? 'bg-primary text-on-primary border-primary'
-                  : 'border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-primary'
+                  : 'border-outline-variant/60 text-on-surface-variant bg-surface-container-lowest/60 hover:border-primary/50 hover:text-primary'
               }`}
             >
               {tag}
@@ -204,17 +300,25 @@ export default function Notes() {
         </div>
       </div>
 
-      {/* Backdrop to close folder menu */}
-      {folderMenuId && (
-        <div className="fixed inset-0 z-30" onClick={() => setFolderMenuId(null)} />
-      )}
-
+      {/* Notes content */}
       <main className="max-w-screen-xl mx-auto px-4 py-4">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <span className="material-symbols-outlined text-[48px] text-outline mb-3">sticky_note_2</span>
             <p className="font-manrope font-semibold text-on-surface mb-1">No notes yet</p>
             <p className="font-work-sans text-sm text-on-surface-variant">Tap + to create your first note</p>
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card">
+            {filtered.map((note) => (
+              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
+            ))}
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {filtered.map((note) => (
+              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />
+            ))}
           </div>
         ) : (
           <div className="masonry-grid" style={{ columnCount: 1 }}>
@@ -223,13 +327,7 @@ export default function Notes() {
               @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
             `}</style>
             {filtered.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onEdit={handleEdit}
-                onDelete={deleteNote}
-                onPin={togglePin}
-              />
+              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" />
             ))}
           </div>
         )}
@@ -239,6 +337,7 @@ export default function Notes() {
       <button
         onClick={openNew}
         className="fixed bottom-28 right-4 w-14 h-14 bg-primary text-on-primary rounded-full shadow-fab flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-40"
+        style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
       >
         <span className="material-symbols-outlined text-[28px]">add</span>
       </button>
@@ -276,6 +375,52 @@ export default function Notes() {
           }}
           onClose={() => { setFolderModalOpen(false); setEditFolder(null); }}
         />
+      )}
+
+      {/* Portal-based folder dropdown — rendered at body level to escape overflow clipping */}
+      {menuAnchor && menuFolder && createPortal(
+        <div
+          style={{ position: 'fixed', top: menuAnchor.top, left: menuAnchor.left, zIndex: 70 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-surface-container-lowest rounded-xl shadow-modal border border-outline-variant/30 min-w-[160px] overflow-hidden"
+        >
+          <button
+            onClick={() => { reorderFolders(menuFolder.id, 'left'); setMenuAnchor(null); }}
+            disabled={menuFolderIdx === 0}
+            className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-on-surface hover:bg-surface-container text-left disabled:opacity-30"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            Move left
+          </button>
+          <button
+            onClick={() => { reorderFolders(menuFolder.id, 'right'); setMenuAnchor(null); }}
+            disabled={menuFolderIdx === folders.length - 1}
+            className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-on-surface hover:bg-surface-container text-left disabled:opacity-30"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+            Move right
+          </button>
+          <div className="border-t border-outline-variant/20" />
+          <button
+            onClick={() => { setEditFolder(menuFolder); setFolderModalOpen(true); setMenuAnchor(null); }}
+            className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-on-surface hover:bg-surface-container text-left"
+          >
+            <span className="material-symbols-outlined text-[16px]">edit</span>
+            Rename
+          </button>
+          <button
+            onClick={() => {
+              deleteFolder(menuFolder.id);
+              setMenuAnchor(null);
+              if (activeFolder === menuFolder.id) setActiveFolder(null);
+            }}
+            className="flex items-center gap-2 w-full px-4 py-2.5 font-inter text-sm text-error hover:bg-error/5 text-left"
+          >
+            <span className="material-symbols-outlined text-[16px]">delete</span>
+            Delete
+          </button>
+        </div>,
+        document.body,
       )}
     </div>
   );

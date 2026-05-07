@@ -212,6 +212,7 @@ export default function Finance() {
         <button
           onClick={() => setAddModalOpen(true)}
           className="fixed bottom-28 right-4 w-14 h-14 bg-primary text-on-primary rounded-full shadow-fab flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-40"
+          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
         >
           <span className="material-symbols-outlined text-[28px]">add</span>
         </button>

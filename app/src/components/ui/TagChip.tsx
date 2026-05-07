@@ -1,27 +1,26 @@
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
-  Design: { bg: 'bg-tertiary/10', text: 'text-tertiary' },
-  Dev: { bg: 'bg-primary/10', text: 'text-primary' },
-  Marketing: { bg: 'bg-secondary/10', text: 'text-secondary' },
-  Personal: { bg: 'bg-pink-100', text: 'text-pink-600' },
-  Work: { bg: 'bg-blue-100', text: 'text-blue-600' },
-  Shopping: { bg: 'bg-amber-100', text: 'text-amber-700' },
-  Health: { bg: 'bg-green-100', text: 'text-green-700' },
-  Finance: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
-  Productivity: { bg: 'bg-violet-100', text: 'text-violet-700' },
-  Growth: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  Urgent: { bg: 'bg-red-100', text: 'text-red-600' },
-  Ideas: { bg: 'bg-orange-100', text: 'text-orange-600' },
+  Design:      { bg: 'bg-tertiary/10',                                    text: 'text-tertiary' },
+  Dev:         { bg: 'bg-primary/10',                                     text: 'text-primary' },
+  Marketing:   { bg: 'bg-secondary/10',                                   text: 'text-secondary' },
+  Personal:    { bg: 'bg-pink-100 dark:bg-pink-950/40',                   text: 'text-pink-600 dark:text-pink-400' },
+  Work:        { bg: 'bg-blue-100 dark:bg-blue-950/40',                   text: 'text-blue-600 dark:text-blue-400' },
+  Shopping:    { bg: 'bg-amber-100 dark:bg-amber-950/40',                 text: 'text-amber-700 dark:text-amber-400' },
+  Health:      { bg: 'bg-green-100 dark:bg-green-950/40',                 text: 'text-green-700 dark:text-green-400' },
+  Finance:     { bg: 'bg-cyan-100 dark:bg-cyan-950/40',                   text: 'text-cyan-700 dark:text-cyan-400' },
+  Productivity:{ bg: 'bg-violet-100 dark:bg-violet-950/40',               text: 'text-violet-700 dark:text-violet-400' },
+  Growth:      { bg: 'bg-emerald-100 dark:bg-emerald-950/40',             text: 'text-emerald-700 dark:text-emerald-400' },
+  Urgent:      { bg: 'bg-red-100 dark:bg-red-950/40',                     text: 'text-red-600 dark:text-red-400' },
+  Ideas:       { bg: 'bg-orange-100 dark:bg-orange-950/40',               text: 'text-orange-600 dark:text-orange-400' },
 };
 
 function getTagColors(tag: string) {
   if (TAG_COLORS[tag]) return TAG_COLORS[tag];
-  // Hash-based fallback
   const palettes = [
-    { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-    { bg: 'bg-rose-100', text: 'text-rose-600' },
-    { bg: 'bg-teal-100', text: 'text-teal-700' },
-    { bg: 'bg-sky-100', text: 'text-sky-700' },
-    { bg: 'bg-lime-100', text: 'text-lime-700' },
+    { bg: 'bg-indigo-100 dark:bg-indigo-950/40', text: 'text-indigo-700 dark:text-indigo-400' },
+    { bg: 'bg-rose-100 dark:bg-rose-950/40',     text: 'text-rose-600 dark:text-rose-400' },
+    { bg: 'bg-teal-100 dark:bg-teal-950/40',     text: 'text-teal-700 dark:text-teal-400' },
+    { bg: 'bg-sky-100 dark:bg-sky-950/40',       text: 'text-sky-700 dark:text-sky-400' },
+    { bg: 'bg-lime-100 dark:bg-lime-950/40',     text: 'text-lime-700 dark:text-lime-400' },
   ];
   let hash = 0;
   for (const c of tag) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;

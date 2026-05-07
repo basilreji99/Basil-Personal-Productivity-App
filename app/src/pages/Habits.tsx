@@ -49,7 +49,7 @@ interface NotesModalProps {
 function NotesModal({ habit, date, existing, onSave, onClose }: NotesModalProps) {
   const [text, setText] = useState(existing ?? '');
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end bg-black/40" onClick={onClose}>
       <div
         className="w-full bg-surface-container-lowest rounded-t-2xl p-5 space-y-4"
         style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
@@ -102,7 +102,7 @@ interface DayDetailSheetProps {
 
 function DayDetailSheet({ habit, date, notes, onClose, onRemove, onEditNotes }: DayDetailSheetProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end bg-black/40" onClick={onClose}>
       <div
         className="w-full bg-surface-container-lowest rounded-t-2xl p-5 space-y-4"
         style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}

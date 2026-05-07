@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { format } from 'date-fns';
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, type DragEndEvent,
@@ -21,11 +22,11 @@ import type { Task, IssueType, Sprint } from '../types';
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ISSUE_CONFIG: Record<IssueType, { label: string; icon: string; color: string; bg: string }> = {
-  epic:    { label: 'Epic',    icon: 'bolt',                     color: 'text-purple-700', bg: 'bg-purple-100' },
-  story:   { label: 'Story',   icon: 'bookmark',                 color: 'text-blue-700',   bg: 'bg-blue-100'   },
-  task:    { label: 'Task',    icon: 'task_alt',                 color: 'text-gray-600',   bg: 'bg-gray-100'   },
-  bug:     { label: 'Bug',     icon: 'bug_report',               color: 'text-red-700',    bg: 'bg-red-100'    },
-  subtask: { label: 'Subtask', icon: 'subdirectory_arrow_right', color: 'text-gray-500',   bg: 'bg-gray-50'    },
+  epic:    { label: 'Epic',    icon: 'bolt',                     color: 'text-purple-700 dark:text-purple-300', bg: 'bg-purple-100 dark:bg-purple-950/40' },
+  story:   { label: 'Story',   icon: 'bookmark',                 color: 'text-blue-700 dark:text-blue-300',     bg: 'bg-blue-100 dark:bg-blue-950/40'     },
+  task:    { label: 'Task',    icon: 'task_alt',                 color: 'text-on-surface-variant',              bg: 'bg-surface-container'                 },
+  bug:     { label: 'Bug',     icon: 'bug_report',               color: 'text-red-700 dark:text-red-300',       bg: 'bg-red-100 dark:bg-red-950/40'       },
+  subtask: { label: 'Subtask', icon: 'subdirectory_arrow_right', color: 'text-on-surface-variant',              bg: 'bg-surface-container-low'             },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
@@ -37,6 +38,19 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function timelineDateLabel(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  if (date.getTime() === today.getTime()) return 'Today';
+  if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
+  const currentYear = new Date().getFullYear();
+  return date.getFullYear() === currentYear
+    ? format(date, 'EEE, MMM d')
+    : format(date, 'EEE, MMM d, yyyy');
+}
 
 function compactDate(dueDate: string): string {
   const d = formatDisplayDate(dueDate);
@@ -50,8 +64,8 @@ function DueBadge({ dueDate }: { dueDate: string | null }) {
   const soon = isDueSoon(dueDate);
   return (
     <span className={`font-inter text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
-      overdue ? 'text-red-600 bg-red-50' :
-      soon    ? 'text-amber-600 bg-amber-50' :
+      overdue ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30' :
+      soon    ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30' :
                 'text-outline bg-surface-container'
     }`}>
       <span className="material-symbols-outlined text-[10px]">event</span>
@@ -129,7 +143,7 @@ function TaskRow({
 
         {/* Story completion count */}
         {task.issueType === 'story' && children.length > 0 && (
-          <span className="font-inter text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full shrink-0">
+          <span className="font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full shrink-0">
             {doneChildren}/{children.length}
           </span>
         )}
@@ -240,27 +254,27 @@ function EpicSection({
   }
 
   return (
-    <div className="rounded-2xl border border-purple-200 bg-purple-50 overflow-hidden">
+    <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50 dark:bg-purple-950/20 overflow-hidden">
       {/* Epic header */}
       <div className="flex items-center gap-2 px-4 py-3">
         {/* Drag handle for the whole epic */}
         {dragHandleProps && (
           <span
             {...dragHandleProps}
-            className="material-symbols-outlined text-[16px] text-purple-300 cursor-grab shrink-0 touch-none"
+            className="material-symbols-outlined text-[16px] text-purple-300 dark:text-purple-700 cursor-grab shrink-0 touch-none"
           >
             drag_indicator
           </span>
         )}
 
-        <button onClick={() => setExpanded((v) => !v)} className="text-purple-500 shrink-0">
+        <button onClick={() => setExpanded((v) => !v)} className="text-purple-500 dark:text-purple-400 shrink-0">
           <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-90' : ''}`}>
             chevron_right
           </span>
         </button>
-        <span className="material-symbols-outlined text-[18px] text-purple-600 shrink-0">bolt</span>
+        <span className="material-symbols-outlined text-[18px] text-purple-600 dark:text-purple-400 shrink-0">bolt</span>
         <span
-          className="flex-1 font-inter font-bold text-sm text-purple-900 cursor-pointer truncate min-w-0"
+          className="flex-1 font-inter font-bold text-sm text-purple-900 dark:text-purple-200 cursor-pointer truncate min-w-0"
           onClick={() => onEdit(epic)}
         >
           {epic.title}
@@ -271,11 +285,11 @@ function EpicSection({
 
         {/* Progress badge */}
         {total > 0 && (
-          <span className="font-inter text-xs font-bold text-purple-600 shrink-0">{pct}%</span>
+          <span className="font-inter text-xs font-bold text-purple-600 dark:text-purple-400 shrink-0">{pct}%</span>
         )}
 
         {/* Status */}
-        <span className="font-inter text-xs text-purple-700 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-full shrink-0">
+        <span className="font-inter text-xs text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/50 border border-purple-300 dark:border-purple-800 px-2 py-0.5 rounded-full shrink-0">
           {epic.status.replace('_', ' ')}
         </span>
 
@@ -283,7 +297,7 @@ function EpicSection({
         <button
           onClick={() => updateTask(epic.id, { status: epic.status === 'done' ? 'todo' : 'done' })}
           className={`shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-            epic.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-purple-400'
+            epic.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-purple-400 dark:border-purple-600'
           }`}
         >
           {epic.status === 'done' && <span className="material-symbols-outlined text-[9px] text-on-tertiary icon-fill">check</span>}
@@ -294,15 +308,15 @@ function EpicSection({
       {/* Progress bar */}
       {total > 0 && (
         <div className="mx-4 mb-0.5">
-          <div className="h-1 bg-purple-100 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          <div className="h-1 bg-purple-100 dark:bg-purple-900/40 rounded-full overflow-hidden">
+            <div className="h-full bg-purple-500 dark:bg-purple-400 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
 
       {/* Children + add buttons inside expanded panel */}
       {expanded && (
-        <div className="border-t border-purple-200">
+        <div className="border-t border-purple-200 dark:border-purple-900/50">
           {directChildren.length > 0 && (
             <div className="px-4 pt-2 pb-1 space-y-1">
               <DndContext sensors={childSensors} collisionDetection={closestCenter} onDragEnd={handleChildDragEnd}>
@@ -325,19 +339,19 @@ function EpicSection({
           <div className="flex items-center gap-2 px-4 py-2">
             <button
               onClick={() => onAddChild(epic.id, 'story', epic.id)}
-              className="flex items-center gap-1 text-purple-600 hover:bg-purple-100 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
+              className="flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
             >
               <span className="material-symbols-outlined text-[14px]">add</span>
               Story
             </button>
             <button
               onClick={() => onAddChild(epic.id, 'task', epic.id)}
-              className="flex items-center gap-1 text-purple-600 hover:bg-purple-100 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
+              className="flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
             >
               <span className="material-symbols-outlined text-[14px]">add</span>
               Task
             </button>
-            <span className="font-inter text-xs text-purple-400 ml-auto">{directChildren.length} items</span>
+            <span className="font-inter text-xs text-purple-400 dark:text-purple-600 ml-auto">{directChildren.length} items</span>
           </div>
         </div>
       )}
@@ -520,7 +534,8 @@ export default function Tasks() {
     return Object.entries(tagUsage).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [pinnedTags, tagUsage]);
 
-  const [view, setView] = useState<'backlog' | 'board' | 'sprint'>('backlog');
+  const [view, setView] = useState<'backlog' | 'board' | 'sprint' | 'timeline'>('backlog');
+  const [timelineDateFilter, setTimelineDateFilter] = useState<'week' | 'month' | 'all'>('month');
   const [activeTag, setActiveTag] = useState('All');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterDue, setFilterDue] = useState<'all' | 'overdue' | 'week'>('all');
@@ -572,6 +587,45 @@ export default function Tasks() {
     [filteredTasks],
   );
 
+  // Timeline: all tasks with due dates (uses tag + priority filters, own date filter)
+  const timelineTasks = useMemo(() => {
+    let list = tasks.filter((t) => !!t.dueDate && t.status !== 'done');
+    if (activeTag !== 'All') list = list.filter((t) => t.tags.includes(activeTag));
+    if (filterPriority !== 'all') list = list.filter((t) => t.priority === filterPriority);
+    if (timelineDateFilter === 'week') {
+      const end = new Date(); end.setDate(end.getDate() + 7);
+      const endStr = end.toISOString().slice(0, 10);
+      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= endStr);
+    } else if (timelineDateFilter === 'month') {
+      const end = new Date(); end.setDate(end.getDate() + 30);
+      const endStr = end.toISOString().slice(0, 10);
+      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= endStr);
+    }
+    return list.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+  }, [tasks, activeTag, filterPriority, timelineDateFilter]);
+
+  const timelineGroups = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const overdueTasks: typeof tasks = [];
+    const futureMap = new Map<string, typeof tasks>();
+    for (const task of timelineTasks) {
+      if (task.dueDate! < todayStr) {
+        overdueTasks.push(task);
+      } else {
+        if (!futureMap.has(task.dueDate!)) futureMap.set(task.dueDate!, []);
+        futureMap.get(task.dueDate!)!.push(task);
+      }
+    }
+    const result: { dateKey: string; label: string; isOverdueGroup: boolean; tasks: typeof tasks }[] = [];
+    if (overdueTasks.length > 0) {
+      result.push({ dateKey: '__overdue', label: 'Overdue', isOverdueGroup: true, tasks: overdueTasks });
+    }
+    for (const [key, groupTasks] of [...futureMap.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      result.push({ dateKey: key, label: timelineDateLabel(key), isOverdueGroup: false, tasks: groupTasks });
+    }
+    return result;
+  }, [timelineTasks]);
+
   // Sprint data
   const currentSprint = activeSprint();
   const sprintTasks = useMemo(
@@ -617,6 +671,24 @@ export default function Tasks() {
     setTaskModalOpen(true);
   };
 
+  // Global Enter key → open create-task modal (when no input/textarea is focused)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || taskModalOpen) return;
+      const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+      if (['input', 'textarea'].includes(tag)) return;
+      if ((document.activeElement as HTMLElement)?.isContentEditable) return;
+      setEditTask(null);
+      setDefaultStatus('backlog');
+      setDefaultParentId(null);
+      setDefaultIssueType('task');
+      setScopeEpicId(null);
+      setTaskModalOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [taskModalOpen]);
+
   const toggleSection = (colId: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -655,15 +727,15 @@ export default function Tasks() {
         <div className="px-4 pt-2.5 pb-1 flex items-center justify-between gap-3">
           {/* View toggle */}
           <div className="flex bg-surface-container rounded-xl p-0.5 gap-0.5">
-            {(['backlog', 'board', 'sprint'] as const).map((v) => (
+            {(['backlog', 'board', 'sprint', 'timeline'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-3 py-1.5 rounded-lg font-inter text-xs font-semibold capitalize transition-all ${
+                className={`px-2.5 py-1.5 rounded-lg font-inter text-xs font-semibold capitalize transition-all ${
                   view === v ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
-                {v === 'sprint' && currentSprint ? '⚡ Sprint' : v.charAt(0).toUpperCase() + v.slice(1)}
+                {v === 'sprint' && currentSprint ? '⚡' : v === 'timeline' ? '📅' : v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             ))}
           </div>
@@ -710,15 +782,15 @@ export default function Tasks() {
           </button>
         </div>
 
-        {/* Priority + due date filters */}
+        {/* Priority + due date / timeline filters */}
         <div className="flex gap-2 px-4 pb-2.5 overflow-x-auto no-scrollbar">
-          {/* Priority chips */}
+          {/* Priority chips (shown in all views) */}
           {[
-            { value: 'all', label: 'All', color: '' },
-            { value: 'critical', label: '🔴 Emergency', color: 'text-red-700 bg-red-50 border-red-300' },
-            { value: 'high', label: '🟠 High', color: 'text-orange-700 bg-orange-50 border-orange-300' },
-            { value: 'medium', label: '🟡 Medium', color: 'text-amber-700 bg-amber-50 border-amber-300' },
-            { value: 'low', label: '🔵 Low', color: 'text-blue-700 bg-blue-50 border-blue-300' },
+            { value: 'all',      label: 'All',          color: '' },
+            { value: 'critical', label: '🔴 Emergency', color: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-800' },
+            { value: 'high',     label: '🟠 High',      color: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 border-orange-300 dark:border-orange-800' },
+            { value: 'medium',   label: '🟡 Medium',    color: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800' },
+            { value: 'low',      label: '🔵 Low',       color: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800' },
           ].map(({ value, label, color }) => (
             <button
               key={value}
@@ -733,24 +805,49 @@ export default function Tasks() {
             </button>
           ))}
           <div className="w-px bg-outline-variant/40 self-stretch shrink-0" />
-          {/* Due date chips */}
-          {[
-            { value: 'all' as const, label: 'Any date' },
-            { value: 'overdue' as const, label: '⚠ Overdue' },
-            { value: 'week' as const, label: '📅 This week' },
-          ].map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setFilterDue(value)}
-              className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
-                filterDue === value
-                  ? value === 'overdue' ? 'bg-red-100 text-red-700 border-red-300' : value === 'week' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-on-surface text-surface border-on-surface'
-                  : 'border-outline-variant text-on-surface-variant hover:border-outline'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {view === 'timeline' ? (
+            /* Timeline date range filter */
+            <>
+              {[
+                { value: 'week' as const, label: '📅 This week' },
+                { value: 'month' as const, label: '🗓 This month' },
+                { value: 'all' as const, label: 'All dates' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setTimelineDateFilter(value)}
+                  className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
+                    timelineDateFilter === value
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'border-outline-variant text-on-surface-variant hover:border-outline'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </>
+          ) : (
+            /* Due date chips for non-timeline views */
+            <>
+              {[
+                { value: 'all' as const, label: 'Any date' },
+                { value: 'overdue' as const, label: '⚠ Overdue' },
+                { value: 'week' as const, label: '📅 This week' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setFilterDue(value)}
+                  className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
+                    filterDue === value
+                      ? value === 'overdue' ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800' : value === 'week' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800' : 'bg-on-surface text-surface border-on-surface'
+                      : 'border-outline-variant text-on-surface-variant hover:border-outline'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -1043,6 +1140,79 @@ export default function Tasks() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── TIMELINE VIEW ────────────────────────────────────────────────── */}
+        {view === 'timeline' && (
+          <div className="space-y-5">
+            {timelineGroups.length === 0 ? (
+              <div className="text-center py-14">
+                <span className="material-symbols-outlined text-[48px] text-outline block mb-3">calendar_today</span>
+                <p className="font-inter font-semibold text-on-surface">No scheduled tasks</p>
+                <p className="font-work-sans text-sm text-on-surface-variant mt-1">
+                  {timelineDateFilter === 'week'
+                    ? 'No tasks due this week'
+                    : timelineDateFilter === 'month'
+                    ? 'No tasks due this month'
+                    : 'No tasks with due dates'}
+                </p>
+              </div>
+            ) : (
+              timelineGroups.map((group) => (
+                <div key={group.dateKey}>
+                  {/* Date group header */}
+                  <div className="flex items-center gap-3 mb-2.5">
+                    <span className={`font-inter text-xs font-bold uppercase tracking-wider shrink-0 ${group.isOverdueGroup ? 'text-red-600' : 'text-outline'}`}>
+                      {group.label}
+                    </span>
+                    <div className={`flex-1 h-px ${group.isOverdueGroup ? 'bg-red-200 dark:bg-red-900/40' : 'bg-outline-variant/30'}`} />
+                    <span className="font-inter text-[10px] text-outline shrink-0">{group.tasks.length}</span>
+                  </div>
+
+                  {/* Tasks in group */}
+                  <div className={`space-y-1.5 pl-3 ml-1 border-l-2 ${group.isOverdueGroup ? 'border-red-300 dark:border-red-800' : 'border-outline-variant/25'}`}>
+                    {group.tasks.map((task) => {
+                      const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
+                      const pri = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.none;
+                      return (
+                        <div
+                          key={task.id}
+                          className="bg-surface-container-lowest rounded-xl px-3 py-2.5 flex items-center gap-2.5 shadow-card cursor-pointer hover:shadow-card-hover transition-shadow"
+                          onClick={() => openEdit(task)}
+                        >
+                          <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+                            {cfg.label.slice(0, 3).toUpperCase()}
+                          </span>
+                          <span className="flex-1 font-inter text-sm text-on-surface truncate min-w-0">{task.title}</span>
+                          {task.priority !== 'none' && (
+                            <span className={`font-inter text-[10px] font-semibold shrink-0 ${pri.color}`}>
+                              {pri.label}
+                            </span>
+                          )}
+                          <span className="font-inter text-[10px] text-outline shrink-0 bg-surface-container px-1.5 py-0.5 rounded-full">
+                            {task.status.replace('_', ' ')}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' });
+                            }}
+                            className={`shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                              task.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-outline-variant hover:border-primary'
+                            }`}
+                          >
+                            {task.status === 'done' && (
+                              <span className="material-symbols-outlined text-[9px] text-on-tertiary icon-fill">check</span>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </main>

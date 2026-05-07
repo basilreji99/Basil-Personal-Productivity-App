@@ -253,6 +253,36 @@ export interface Artwork {
   createdAt: string;
 }
 
+// ─── Books ───────────────────────────────────────────────────────────────────
+
+export type ReadStatus = 'read' | 'reading' | 'dropped';
+
+export interface BookReview {
+  id: string;
+  title: string;
+  author: string;
+  status: ReadStatus;
+  rating: number;     // 1–10
+  review: string;
+  images: string[];   // base64
+  genres: string[];
+  year?: number;      // publication year
+  pages?: number;
+  dateRead?: string;  // YYYY-MM-DD
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReadingListItem {
+  id: string;
+  title: string;
+  author: string;
+  reason: string;
+  priority: MediaPriority;
+  genres: string[];
+  addedAt: string;
+}
+
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 export type SearchResultType = 'note' | 'task' | 'habit' | 'transaction';

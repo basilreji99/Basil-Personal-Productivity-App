@@ -41,7 +41,7 @@ export default function EventModal({ initial, defaultDate, onSave, onDelete, onC
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant">
         <button onClick={onClose} className="p-1.5 -ml-1.5 rounded-xl text-on-surface-variant">
@@ -79,7 +79,7 @@ export default function EventModal({ initial, defaultDate, onSave, onDelete, onC
               className={`w-11 h-6 rounded-full transition-colors ${isAllDay ? 'bg-primary' : 'bg-outline-variant'}`}
             >
               <span
-                className={`block w-5 h-5 rounded-full bg-white shadow transition-transform mx-0.5 ${isAllDay ? 'translate-x-5' : 'translate-x-0'}`}
+                className={`block w-5 h-5 rounded-full bg-white dark:bg-gray-200 shadow transition-transform mx-0.5 ${isAllDay ? 'translate-x-5' : 'translate-x-0'}`}
               />
             </button>
           </div>

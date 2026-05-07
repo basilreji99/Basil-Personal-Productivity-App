@@ -16,6 +16,8 @@ interface NotesState {
   addFolder: (name: string, emoji?: string) => NoteFolder;
   updateFolder: (id: string, updates: Partial<Pick<NoteFolder, 'name' | 'emoji'>>) => void;
   deleteFolder: (id: string) => void;
+  reorderFolders: (id: string, direction: 'left' | 'right') => void;
+  reorderFolderIds: (ids: string[]) => void;
 }
 
 export const useNotesStore = create<NotesState>()(
@@ -130,8 +132,23 @@ export const useNotesStore = create<NotesState>()(
       deleteFolder: (id) =>
         set((s) => ({
           folders: s.folders.filter((f) => f.id !== id),
-          // Move notes out of deleted folder
           notes: s.notes.map((n) => (n.folderId === id ? { ...n, folderId: null } : n)),
+        })),
+
+      reorderFolders: (id, direction) =>
+        set((s) => {
+          const idx = s.folders.findIndex((f) => f.id === id);
+          if (idx < 0) return {};
+          const next = [...s.folders];
+          if (direction === 'left' && idx > 0) [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+          else if (direction === 'right' && idx < next.length - 1) [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+          else return {};
+          return { folders: next };
+        }),
+
+      reorderFolderIds: (ids) =>
+        set((s) => ({
+          folders: ids.map((id) => s.folders.find((f) => f.id === id)!).filter(Boolean),
         })),
     }),
     {

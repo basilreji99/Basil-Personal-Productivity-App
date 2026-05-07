@@ -39,7 +39,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', hid
   return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
       onClick={(e) => e.target === overlayRef.current && onClose()}
     >
       <div className="absolute inset-0 bg-inverse-surface/40 backdrop-blur-sm animate-fade-in" />
@@ -57,7 +57,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', hid
             </button>
           </div>
         )}
-        <div className="overflow-y-auto flex-1">{children}</div>
+        <div className="overflow-y-auto flex-1" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}>{children}</div>
       </div>
     </div>,
     document.body,

@@ -1,15 +1,15 @@
 import { useState, useMemo, useRef } from 'react';
 import TopBar from '../../components/layout/TopBar';
 import Modal from '../../components/ui/Modal';
-import { useHobbyStore } from '../../store/hobbyStore';
-import type { MediaReview, WatchlistItem, MediaType, WatchStatus, MediaPriority } from '../../types';
+import { useBooksStore } from '../../store/booksStore';
+import type { BookReview, ReadingListItem, ReadStatus, MediaPriority } from '../../types';
 
 // ─── Star rating ──────────────────────────────────────────────────────────────
 
 function StarRating({ value, onChange, readonly }: { value: number; onChange?: (v: number) => void; readonly?: boolean }) {
   return (
     <div className="flex gap-0.5">
-      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
         <button key={n} disabled={readonly} onClick={() => onChange?.(n)}
           className={`text-[18px] ${readonly ? '' : 'hover:scale-110 transition-transform'}`}>
           <span className={`material-symbols-outlined text-[18px] ${n <= value ? 'text-amber-400 icon-fill' : 'text-outline'}`}>
@@ -21,27 +21,30 @@ function StarRating({ value, onChange, readonly }: { value: number; onChange?: (
   );
 }
 
-// ─── Review Modal ─────────────────────────────────────────────────────────────
+// ─── Common config ────────────────────────────────────────────────────────────
 
-const COMMON_GENRES = ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Thriller', 'Romance', 'Documentary', 'Animation', 'Fantasy'];
-const STATUS_OPTIONS: { value: WatchStatus; label: string }[] = [
-  { value: 'watched', label: 'Watched' },
-  { value: 'watching', label: 'Watching' },
+const BOOK_GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'Sci-Fi', 'Fantasy', 'Biography', 'Self-Help', 'Romance', 'Thriller', 'History', 'Science', 'Philosophy'];
+
+const STATUS_OPTIONS: { value: ReadStatus; label: string }[] = [
+  { value: 'read', label: 'Read' },
+  { value: 'reading', label: 'Reading' },
   { value: 'dropped', label: 'Dropped' },
 ];
 
-function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => void; review?: MediaReview | null }) {
-  const { addReview, updateReview, deleteReview } = useHobbyStore();
+// ─── Review Modal ─────────────────────────────────────────────────────────────
 
-  const [title, setTitle]   = useState('');
-  const [type, setType]     = useState<MediaType>('movie');
-  const [status, setStatus] = useState<WatchStatus>('watched');
-  const [rating, setRating] = useState(7);
+function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => void; review?: BookReview | null }) {
+  const { addReview, updateReview, deleteReview } = useBooksStore();
+
+  const [title, setTitle]       = useState('');
+  const [author, setAuthor]     = useState('');
+  const [status, setStatus]     = useState<ReadStatus>('read');
+  const [rating, setRating]     = useState(7);
   const [reviewText, setReviewText] = useState('');
-  const [genres, setGenres] = useState<string[]>([]);
-  const [year, setYear]     = useState('');
-  const [seasons, setSeasons] = useState('');
-  const [watchedDate, setWatchedDate] = useState('');
+  const [genres, setGenres]     = useState<string[]>([]);
+  const [year, setYear]         = useState('');
+  const [pages, setPages]       = useState('');
+  const [dateRead, setDateRead] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [coverImage, setCoverImage] = useState<string | null>(null);
@@ -57,29 +60,29 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
   useMemo(() => {
     if (!open) return;
     if (review) {
-      setTitle(review.title); setType(review.type); setStatus(review.status);
+      setTitle(review.title); setAuthor(review.author); setStatus(review.status);
       setRating(review.rating); setReviewText(review.review); setGenres(review.genres);
-      setYear(review.year?.toString() ?? ''); setSeasons(review.seasons?.toString() ?? '');
-      setWatchedDate(review.watchedDate ?? '');
+      setYear(review.year?.toString() ?? ''); setPages(review.pages?.toString() ?? '');
+      setDateRead(review.dateRead ?? '');
     } else {
-      setTitle(''); setType('movie'); setStatus('watched'); setRating(7);
-      setReviewText(''); setGenres([]); setYear(''); setSeasons(''); setWatchedDate('');
+      setTitle(''); setAuthor(''); setStatus('read'); setRating(7);
+      setReviewText(''); setGenres([]); setYear(''); setPages(''); setDateRead('');
     }
     setCoverImage(review?.images?.[0] ?? null);
     setConfirmDelete(false);
   }, [open]);
 
   const toggleGenre = (g: string) =>
-    setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+    setGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
 
   const handleSave = () => {
     const existingExtra = (review?.images ?? []).slice(1);
     const images = coverImage ? [coverImage, ...existingExtra] : existingExtra;
     const payload = {
-      title, type, status, rating, review: reviewText, images,
-      genres, year: year ? parseInt(year) : undefined,
-      seasons: seasons ? parseInt(seasons) : undefined,
-      watchedDate: watchedDate || undefined,
+      title, author, status, rating, review: reviewText, images, genres,
+      year: year ? parseInt(year) : undefined,
+      pages: pages ? parseInt(pages) : undefined,
+      dateRead: dateRead || undefined,
     };
     if (review) updateReview(review.id, payload);
     else addReview(payload);
@@ -113,21 +116,18 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
 
           <div className="space-y-1">
             <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Title</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie or series name"
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Book title"
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Author</label>
+            <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author name"
               className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
           </div>
 
           <div className="flex gap-2">
-            {(['movie', 'series'] as MediaType[]).map(t => (
-              <button key={t} onClick={() => setType(t)}
-                className={`flex-1 py-2 rounded-lg font-inter text-sm font-medium capitalize transition-colors ${type === t ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                {t}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            {STATUS_OPTIONS.map(opt => (
+            {STATUS_OPTIONS.map((opt) => (
               <button key={opt.value} onClick={() => setStatus(opt.value)}
                 className={`flex-1 py-1.5 rounded-lg font-inter text-xs font-medium transition-colors ${status === opt.value ? 'bg-primary/15 text-primary border border-primary/30' : 'bg-surface-container text-on-surface-variant'}`}>
                 {opt.label}
@@ -145,7 +145,7 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
 
           <div className="space-y-1">
             <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Review</label>
-            <textarea value={reviewText} onChange={e => setReviewText(e.target.value)} rows={3}
+            <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} rows={3}
               placeholder="Your thoughts..."
               className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50 resize-none" />
           </div>
@@ -153,7 +153,7 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
           <div className="space-y-1">
             <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Genres</label>
             <div className="flex flex-wrap gap-1.5">
-              {COMMON_GENRES.map(g => (
+              {BOOK_GENRES.map((g) => (
                 <button key={g} onClick={() => toggleGenre(g)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium transition-colors ${genres.includes(g) ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
                   {g}
@@ -162,25 +162,22 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Year</label>
-              <input type="number" value={year} onChange={e => setYear(e.target.value)} placeholder="2024"
+              <input type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2024"
                 className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
             </div>
-            {type === 'series' ? (
-              <div className="space-y-1">
-                <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Seasons</label>
-                <input type="number" value={seasons} onChange={e => setSeasons(e.target.value)} placeholder="3"
-                  className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Watch Date</label>
-                <input type="date" value={watchedDate} onChange={e => setWatchedDate(e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-              </div>
-            )}
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Pages</label>
+              <input type="number" value={pages} onChange={(e) => setPages(e.target.value)} placeholder="320"
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+            </div>
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Date Read</label>
+              <input type="date" value={dateRead} onChange={(e) => setDateRead(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-2 py-2 font-inter text-sm outline-none" />
+            </div>
           </div>
         </div>
 
@@ -201,7 +198,7 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
           ) : <div />}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter text-sm hover:bg-surface-container">Cancel</button>
-            <button onClick={handleSave} disabled={!title}
+            <button onClick={handleSave} disabled={!title || !author}
               className="px-4 py-2 rounded-lg bg-primary text-on-primary font-inter font-medium text-sm disabled:opacity-50">
               {review ? 'Save' : 'Add'}
             </button>
@@ -212,41 +209,41 @@ function ReviewModal({ open, onClose, review }: { open: boolean; onClose: () => 
   );
 }
 
-// ─── Watchlist Modal ──────────────────────────────────────────────────────────
+// ─── Reading List Modal ───────────────────────────────────────────────────────
 
-function WatchlistModal({ open, onClose, item }: { open: boolean; onClose: () => void; item?: WatchlistItem | null }) {
-  const { addWatchlistItem, updateWatchlistItem, deleteWatchlistItem, moveToReview } = useHobbyStore();
+function ReadingListModal({ open, onClose, item }: { open: boolean; onClose: () => void; item?: ReadingListItem | null }) {
+  const { addToReadingList, updateReadingListItem, deleteReadingListItem, moveToReview } = useBooksStore();
 
   const [title, setTitle]       = useState('');
-  const [type, setType]         = useState<MediaType>('movie');
+  const [author, setAuthor]     = useState('');
   const [reason, setReason]     = useState('');
   const [priority, setPriority] = useState<MediaPriority>('medium');
   const [genres, setGenres]     = useState<string[]>([]);
-  const [markWatched, setMarkWatched] = useState(false);
-  const [watchRating, setWatchRating] = useState(7);
+  const [markRead, setMarkRead] = useState(false);
+  const [readRating, setReadRating] = useState(7);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useMemo(() => {
     if (!open) return;
     if (item) {
-      setTitle(item.title); setType(item.type); setReason(item.reason);
+      setTitle(item.title); setAuthor(item.author); setReason(item.reason);
       setPriority(item.priority); setGenres(item.genres);
     } else {
-      setTitle(''); setType('movie'); setReason(''); setPriority('medium'); setGenres([]);
+      setTitle(''); setAuthor(''); setReason(''); setPriority('medium'); setGenres([]);
     }
-    setMarkWatched(false); setWatchRating(7); setConfirmDelete(false);
+    setMarkRead(false); setReadRating(7); setConfirmDelete(false);
   }, [open]);
 
   const toggleGenre = (g: string) =>
-    setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+    setGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
 
   const handleSave = () => {
-    if (markWatched && item) {
-      moveToReview(item.id, watchRating, '', 'watched', new Date().toISOString().slice(0, 10));
+    if (markRead && item) {
+      moveToReview(item.id, readRating, '', 'read', new Date().toISOString().slice(0, 10));
     } else if (item) {
-      updateWatchlistItem(item.id, { title, type, reason, priority, genres });
+      updateReadingListItem(item.id, { title, author, reason, priority, genres });
     } else {
-      addWatchlistItem({ title, type, reason, priority, genres });
+      addToReadingList({ title, author, reason, priority, genres });
     }
     onClose();
   };
@@ -258,79 +255,78 @@ function WatchlistModal({ open, onClose, item }: { open: boolean; onClose: () =>
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={item ? 'Edit Watchlist' : 'Add to Watchlist'} size="sm">
-      <div className="p-5 space-y-4">
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Title</label>
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Movie or series name"
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-        </div>
-
-        <div className="flex gap-2">
-          {(['movie', 'series'] as MediaType[]).map(t => (
-            <button key={t} onClick={() => setType(t)}
-              className={`flex-1 py-2 rounded-lg font-inter text-sm font-medium capitalize ${type === t ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-              {t}
-            </button>
-          ))}
-        </div>
-
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Why watch it?</label>
-          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. recommended by friend"
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
-        </div>
-
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Priority</label>
-          <div className="flex gap-2">
-            {(['high', 'medium', 'low'] as MediaPriority[]).map(p => (
-              <button key={p} onClick={() => setPriority(p)}
-                className={`flex-1 py-1.5 rounded-lg font-inter text-xs font-medium capitalize border transition-colors ${priority === p ? priorityColors[p] : 'bg-surface-container text-on-surface-variant border-transparent'}`}>
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Genres</label>
-          <div className="flex flex-wrap gap-1.5">
-            {COMMON_GENRES.map(g => (
-              <button key={g} onClick={() => toggleGenre(g)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium ${genres.includes(g) ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                {g}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {item && (
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div className={`w-10 h-6 rounded-full transition-colors ${markWatched ? 'bg-primary' : 'bg-surface-container'}`}
-              onClick={() => setMarkWatched(v => !v)}>
-              <div className={`w-5 h-5 rounded-full bg-white dark:bg-gray-200 shadow m-0.5 transition-transform ${markWatched ? 'translate-x-4' : ''}`} />
-            </div>
-            <span className="font-inter text-sm text-on-surface">Mark as watched</span>
-          </label>
-        )}
-
-        {markWatched && (
+    <Modal open={open} onClose={onClose} title={item ? 'Edit Reading List' : 'Add to Reading List'} size="sm">
+      <div className="flex flex-col">
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
           <div className="space-y-1">
-            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Quick Rating</label>
-            <div className="flex items-center gap-3">
-              <StarRating value={watchRating} onChange={setWatchRating} />
-              <span className="font-manrope font-bold text-lg text-primary">{watchRating}/10</span>
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Book title"
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Author</label>
+            <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author name"
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Why read it?</label>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. recommended by a friend"
+              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Priority</label>
+            <div className="flex gap-2">
+              {(['high', 'medium', 'low'] as MediaPriority[]).map((p) => (
+                <button key={p} onClick={() => setPriority(p)}
+                  className={`flex-1 py-1.5 rounded-lg font-inter text-xs font-medium capitalize border transition-colors ${priority === p ? priorityColors[p] : 'bg-surface-container text-on-surface-variant border-transparent'}`}>
+                  {p}
+                </button>
+              ))}
             </div>
           </div>
-        )}
 
-        <div className="flex justify-between items-center pt-2">
+          <div className="space-y-1">
+            <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Genres</label>
+            <div className="flex flex-wrap gap-1.5">
+              {BOOK_GENRES.map((g) => (
+                <button key={g} onClick={() => toggleGenre(g)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-inter font-medium ${genres.includes(g) ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {item && (
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className={`w-10 h-6 rounded-full transition-colors ${markRead ? 'bg-primary' : 'bg-surface-container'}`}
+                onClick={() => setMarkRead((v) => !v)}>
+                <div className={`w-5 h-5 rounded-full bg-white dark:bg-gray-200 shadow m-0.5 transition-transform ${markRead ? 'translate-x-4' : ''}`} />
+              </div>
+              <span className="font-inter text-sm text-on-surface">Mark as read</span>
+            </label>
+          )}
+
+          {markRead && (
+            <div className="space-y-1">
+              <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Quick Rating</label>
+              <div className="flex items-center gap-3">
+                <StarRating value={readRating} onChange={setReadRating} />
+                <span className="font-manrope font-bold text-lg text-primary">{readRating}/10</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center px-5 py-4 border-t border-outline-variant/20 shrink-0">
           {item ? (
             confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="font-inter text-xs text-error">Remove?</span>
-                <button onClick={() => { deleteWatchlistItem(item.id); onClose(); }}
+                <button onClick={() => { deleteReadingListItem(item.id); onClose(); }}
                   className="px-3 py-1.5 rounded-lg bg-error text-on-error font-inter text-xs">Yes</button>
                 <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-on-surface-variant font-inter text-xs">No</button>
               </div>
@@ -342,9 +338,9 @@ function WatchlistModal({ open, onClose, item }: { open: boolean; onClose: () =>
           ) : <div />}
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter text-sm hover:bg-surface-container">Cancel</button>
-            <button onClick={handleSave} disabled={!title}
+            <button onClick={handleSave} disabled={!title || !author}
               className="px-4 py-2 rounded-lg bg-primary text-on-primary font-inter font-medium text-sm disabled:opacity-50">
-              {markWatched ? 'Move to Reviews' : item ? 'Save' : 'Add'}
+              {markRead ? 'Move to Reviews' : item ? 'Save' : 'Add'}
             </button>
           </div>
         </div>
@@ -355,8 +351,8 @@ function WatchlistModal({ open, onClose, item }: { open: boolean; onClose: () =>
 
 // ─── Review Card ──────────────────────────────────────────────────────────────
 
-function ReviewCard({ review, onEdit }: { review: MediaReview; onEdit: () => void }) {
-  const statusColor = { watched: 'text-tertiary', watching: 'text-primary', dropped: 'text-error' }[review.status];
+function ReviewCard({ review, onEdit }: { review: BookReview; onEdit: () => void }) {
+  const statusColor = { read: 'text-tertiary', reading: 'text-primary', dropped: 'text-error' }[review.status];
   const coverImage = review.images?.[0];
 
   return (
@@ -370,13 +366,12 @@ function ReviewCard({ review, onEdit }: { review: MediaReview; onEdit: () => voi
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-inter text-[10px] text-on-surface-variant uppercase tracking-wide">
-                  {review.type}
-                </span>
                 <span className={`font-inter text-[10px] font-semibold uppercase ${statusColor}`}>{review.status}</span>
+                {review.year && <span className="font-inter text-[10px] text-outline">{review.year}</span>}
+                {review.pages && <span className="font-inter text-[10px] text-outline">{review.pages}p</span>}
               </div>
               <p className="font-manrope font-bold text-sm text-on-surface truncate">{review.title}</p>
-              {review.year && <p className="font-inter text-xs text-outline">{review.year}{review.seasons ? ` · ${review.seasons}S` : ''}</p>}
+              <p className="font-inter text-xs text-on-surface-variant truncate">{review.author}</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <span className="material-symbols-outlined text-[16px] text-amber-400 icon-fill">star</span>
@@ -389,7 +384,7 @@ function ReviewCard({ review, onEdit }: { review: MediaReview; onEdit: () => voi
           )}
           {review.genres.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
-              {review.genres.slice(0, 3).map(g => (
+              {review.genres.slice(0, 3).map((g) => (
                 <span key={g} className="px-2 py-0.5 bg-surface-container rounded-full font-inter text-[10px] text-on-surface-variant">{g}</span>
               ))}
             </div>
@@ -402,27 +397,29 @@ function ReviewCard({ review, onEdit }: { review: MediaReview; onEdit: () => voi
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'reviews' | 'watchlist';
+type Tab = 'reviews' | 'reading-list';
 
-export default function Movies() {
-  const { reviews, watchlist } = useHobbyStore();
+export default function Books() {
+  const { reviews, readingList } = useBooksStore();
   const [tab, setTab] = useState<Tab>('reviews');
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [editReview, setEditReview] = useState<MediaReview | null>(null);
-  const [editWatchlist, setEditWatchlist] = useState<WatchlistItem | null>(null);
-  const [filter, setFilter] = useState<'all' | 'movie' | 'series'>('all');
+  const [listOpen, setListOpen] = useState(false);
+  const [editReview, setEditReview] = useState<BookReview | null>(null);
+  const [editListItem, setEditListItem] = useState<ReadingListItem | null>(null);
+  const [filterGenre, setFilterGenre] = useState('All');
   const [sortRating, setSortRating] = useState(false);
 
+  const allGenres = useMemo(() => {
+    const set = new Set<string>();
+    reviews.forEach((r) => r.genres.forEach((g) => set.add(g)));
+    return ['All', ...Array.from(set).sort()];
+  }, [reviews]);
+
   const filteredReviews = useMemo(() => {
-    let list = filter === 'all' ? reviews : reviews.filter(r => r.type === filter);
+    let list = filterGenre === 'All' ? reviews : reviews.filter((r) => r.genres.includes(filterGenre));
     if (sortRating) list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [reviews, filter, sortRating]);
-
-  const filteredWatchlist = useMemo(() =>
-    filter === 'all' ? watchlist : watchlist.filter(w => w.type === filter),
-  [watchlist, filter]);
+  }, [reviews, filterGenre, sortRating]);
 
   const avgRating = reviews.length > 0
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
@@ -430,7 +427,7 @@ export default function Movies() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Movies & Series" showBack />
+      <TopBar title="Books" showBack />
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-4">
 
@@ -438,77 +435,75 @@ export default function Movies() {
         {reviews.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-surface-container-lowest rounded-xl p-3 text-center shadow-sm">
-              <p className="font-manrope font-bold text-xl text-on-surface">{reviews.length}</p>
-              <p className="font-inter text-[10px] text-outline">Reviews</p>
+              <p className="font-manrope font-bold text-xl text-on-surface">{reviews.filter((r) => r.status === 'read').length}</p>
+              <p className="font-inter text-[10px] text-outline">Read</p>
             </div>
             <div className="bg-surface-container-lowest rounded-xl p-3 text-center shadow-sm">
               <p className="font-manrope font-bold text-xl text-amber-500">{avgRating}</p>
               <p className="font-inter text-[10px] text-outline">Avg Rating</p>
             </div>
             <div className="bg-surface-container-lowest rounded-xl p-3 text-center shadow-sm">
-              <p className="font-manrope font-bold text-xl text-on-surface">{watchlist.length}</p>
-              <p className="font-inter text-[10px] text-outline">Watchlist</p>
+              <p className="font-manrope font-bold text-xl text-on-surface">{readingList.length}</p>
+              <p className="font-inter text-[10px] text-outline">Want to Read</p>
             </div>
           </div>
         )}
 
         {/* Tabs */}
         <div className="flex bg-surface-container rounded-xl p-1 gap-1">
-          {(['reviews', 'watchlist'] as Tab[]).map(t => (
+          {(['reviews', 'reading-list'] as Tab[]).map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`flex-1 py-2 rounded-lg font-inter text-sm font-medium capitalize transition-colors ${tab === t ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>
-              {t} {t === 'reviews' ? `(${reviews.length})` : `(${watchlist.length})`}
+              className={`flex-1 py-2 rounded-lg font-inter text-sm font-medium transition-colors ${tab === t ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant'}`}>
+              {t === 'reviews' ? `Reviews (${reviews.length})` : `Reading List (${readingList.length})`}
             </button>
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-2 items-center">
-          <div className="flex gap-1">
-            {(['all', 'movie', 'series'] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-full font-inter text-xs font-medium capitalize transition-colors ${filter === f ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                {f}
-              </button>
-            ))}
-          </div>
-          {tab === 'reviews' && (
-            <button onClick={() => setSortRating(v => !v)} className="ml-auto flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-inter text-on-surface-variant bg-surface-container">
+        {/* Filters (reviews only) */}
+        {tab === 'reviews' && (
+          <div className="flex gap-2 items-center overflow-x-auto no-scrollbar">
+            <div className="flex gap-1 flex-shrink-0">
+              {allGenres.slice(0, 6).map((g) => (
+                <button key={g} onClick={() => setFilterGenre(g)}
+                  className={`px-3 py-1.5 rounded-full font-inter text-xs font-medium whitespace-nowrap transition-colors ${filterGenre === g ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setSortRating((v) => !v)} className="ml-auto flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-inter text-on-surface-variant bg-surface-container flex-shrink-0">
               <span className="material-symbols-outlined text-[14px]">sort</span>
               {sortRating ? 'By rating' : 'Recent'}
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Content */}
         {tab === 'reviews' ? (
           filteredReviews.length > 0 ? (
             <div className="space-y-3">
-              {filteredReviews.map(r => (
+              {filteredReviews.map((r) => (
                 <ReviewCard key={r.id} review={r} onEdit={() => { setEditReview(r); setReviewOpen(true); }} />
               ))}
             </div>
           ) : (
             <div className="text-center py-12">
-              <span className="material-symbols-outlined text-[48px] text-outline mb-3">movie</span>
-              <p className="font-inter text-sm text-on-surface-variant">No reviews yet</p>
+              <span className="material-symbols-outlined text-[48px] text-outline block mb-3">menu_book</span>
+              <p className="font-inter text-sm text-on-surface-variant">No reviews yet — add the first book you've read</p>
             </div>
           )
         ) : (
-          watchlist.length > 0 ? (
+          readingList.length > 0 ? (
             <div className="space-y-2">
-              {filteredWatchlist.map(w => (
-                <button key={w.id} onClick={() => { setEditWatchlist(w); setWatchlistOpen(true); }}
+              {readingList.map((w) => (
+                <button key={w.id} onClick={() => { setEditListItem(w); setListOpen(true); }}
                   className="w-full flex items-center gap-3 bg-surface-container-lowest rounded-xl px-4 py-3 shadow-sm text-left hover:bg-surface-container/50 active:scale-[0.99] transition-all">
-                  <span className="material-symbols-outlined text-[20px] text-on-surface-variant">
-                    {w.type === 'movie' ? 'local_movies' : 'tv'}
-                  </span>
+                  <span className="material-symbols-outlined text-[20px] text-on-surface-variant">bookmark</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-inter font-semibold text-sm text-on-surface truncate">{w.title}</p>
-                    {w.reason && <p className="font-inter text-xs text-outline truncate">{w.reason}</p>}
+                    <p className="font-inter text-xs text-outline truncate">{w.author}{w.reason ? ` · ${w.reason}` : ''}</p>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full font-inter text-[10px] font-medium capitalize
-                    ${w.priority === 'high' ? 'bg-red-100 text-red-700' : w.priority === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                    ${w.priority === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : w.priority === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-surface-container text-on-surface-variant'}`}>
                     {w.priority}
                   </span>
                 </button>
@@ -516,8 +511,8 @@ export default function Movies() {
             </div>
           ) : (
             <div className="text-center py-12">
-              <span className="material-symbols-outlined text-[48px] text-outline mb-3">bookmark</span>
-              <p className="font-inter text-sm text-on-surface-variant">Watchlist is empty</p>
+              <span className="material-symbols-outlined text-[48px] text-outline block mb-3">bookmark_add</span>
+              <p className="font-inter text-sm text-on-surface-variant">Reading list is empty</p>
             </div>
           )
         )}
@@ -526,7 +521,7 @@ export default function Movies() {
       {/* FABs */}
       <div className="fixed right-4 z-40 flex flex-col gap-3"
         style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
-        <button onClick={() => { setEditWatchlist(null); setWatchlistOpen(true); }}
+        <button onClick={() => { setEditListItem(null); setListOpen(true); }}
           className="w-12 h-12 bg-surface-container-lowest rounded-full shadow-fab flex items-center justify-center border border-outline-variant/20 hover:scale-105 active:scale-95 transition-transform">
           <span className="material-symbols-outlined text-[22px] text-on-surface-variant">bookmark_add</span>
         </button>
@@ -537,7 +532,7 @@ export default function Movies() {
       </div>
 
       <ReviewModal open={reviewOpen} onClose={() => { setReviewOpen(false); setEditReview(null); }} review={editReview} />
-      <WatchlistModal open={watchlistOpen} onClose={() => { setWatchlistOpen(false); setEditWatchlist(null); }} item={editWatchlist} />
+      <ReadingListModal open={listOpen} onClose={() => { setListOpen(false); setEditListItem(null); }} item={editListItem} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -12,19 +12,19 @@ import { useNotesStore } from '../../store/notesStore';
 import { scheduleTaskNotifications } from '../../services/taskNotifications';
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string }[] = [
-  { value: 'critical', label: 'Emergency', color: 'text-red-700',   bg: 'bg-red-100 border-red-300' },
-  { value: 'high',     label: 'High',      color: 'text-orange-700', bg: 'bg-orange-100 border-orange-300' },
-  { value: 'medium',   label: 'Medium',    color: 'text-amber-700',  bg: 'bg-amber-100 border-amber-300' },
-  { value: 'low',      label: 'Low',       color: 'text-blue-700',   bg: 'bg-blue-100 border-blue-300' },
-  { value: 'none',     label: 'None',      color: 'text-outline',    bg: 'bg-surface-container border-outline-variant' },
+  { value: 'critical', label: 'Emergency', color: 'text-red-700 dark:text-red-400',    bg: 'bg-red-100 border-red-300 dark:bg-red-950/40 dark:border-red-800' },
+  { value: 'high',     label: 'High',      color: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-100 border-orange-300 dark:bg-orange-950/40 dark:border-orange-800' },
+  { value: 'medium',   label: 'Medium',    color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 border-amber-300 dark:bg-amber-950/40 dark:border-amber-800' },
+  { value: 'low',      label: 'Low',       color: 'text-blue-700 dark:text-blue-400',  bg: 'bg-blue-100 border-blue-300 dark:bg-blue-950/40 dark:border-blue-800' },
+  { value: 'none',     label: 'None',      color: 'text-outline',                       bg: 'bg-surface-container border-outline-variant' },
 ];
 
 const ISSUE_TYPES: { value: IssueType; label: string; icon: string; cls: string }[] = [
-  { value: 'epic',    label: 'Epic',    icon: 'bolt',                      cls: 'bg-purple-100 text-purple-700 border-purple-300' },
-  { value: 'story',   label: 'Story',   icon: 'bookmark',                  cls: 'bg-blue-100 text-blue-700 border-blue-300' },
+  { value: 'epic',    label: 'Epic',    icon: 'bolt',                      cls: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800' },
+  { value: 'story',   label: 'Story',   icon: 'bookmark',                  cls: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800' },
   { value: 'task',    label: 'Task',    icon: 'task_alt',                  cls: 'bg-surface-container text-on-surface-variant border-outline-variant' },
-  { value: 'bug',     label: 'Bug',     icon: 'bug_report',                cls: 'bg-red-100 text-red-700 border-red-300' },
-  { value: 'subtask', label: 'Subtask', icon: 'subdirectory_arrow_right',  cls: 'bg-gray-100 text-gray-600 border-gray-300' },
+  { value: 'bug',     label: 'Bug',     icon: 'bug_report',                cls: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800' },
+  { value: 'subtask', label: 'Subtask', icon: 'subdirectory_arrow_right',  cls: 'bg-surface-container text-on-surface-variant border-outline-variant' },
 ];
 
 const STORY_POINTS = [1, 2, 3, 5, 8, 13];
@@ -90,6 +90,108 @@ function DescriptionEditor({ content, onChange }: { content: string; onChange: (
     </div>
   );
 }
+
+// ─── Inline calendar date picker (avoids native Android date picker overlay) ──
+
+const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CAL_DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+function DatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(() => value ? parseInt(value.slice(0, 4)) : new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.slice(5, 7)) - 1 : new Date().getMonth());
+  const wasOpen = useRef(false);
+
+  // When picker opens, snap the view to the selected date (or today)
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      const base = value || today;
+      setViewYear(parseInt(base.slice(0, 4)));
+      setViewMonth(parseInt(base.slice(5, 7)) - 1);
+    }
+    wasOpen.current = open;
+  }, [open]);
+
+  const firstDow    = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const prevMonth = () => viewMonth === 0  ? (setViewYear(y => y - 1), setViewMonth(11))  : setViewMonth(m => m - 1);
+  const nextMonth = () => viewMonth === 11 ? (setViewYear(y => y + 1), setViewMonth(0))   : setViewMonth(m => m + 1);
+
+  const pick = (day: number) => {
+    onChange(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    setOpen(false);
+  };
+
+  const displayDate = value
+    ? new Date(value + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
+
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-left hover:border-primary/40 transition-colors">
+        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
+        <span className={`flex-1 ${displayDate ? 'text-on-surface' : 'text-outline/50'}`}>
+          {displayDate ?? 'No due date'}
+        </span>
+        {value && (
+          <span onClick={(e) => { e.stopPropagation(); onChange(''); setOpen(false); }}
+            className="text-outline hover:text-error transition-colors cursor-pointer">
+            <span className="material-symbols-outlined text-[14px]">close</span>
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-2 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-modal overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-outline-variant/15">
+            <button type="button" onClick={prevMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container transition-colors">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_left</span>
+            </button>
+            <span className="font-inter font-semibold text-sm text-on-surface">
+              {CAL_MONTHS[viewMonth]} {viewYear}
+            </span>
+            <button type="button" onClick={nextMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container transition-colors">
+              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_right</span>
+            </button>
+          </div>
+
+          <div className="p-2">
+            <div className="grid grid-cols-7 mb-1">
+              {CAL_DAYS.map(d => (
+                <span key={d} className="text-center font-inter text-[10px] text-outline font-semibold py-1">{d}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-0.5">
+              {Array.from({ length: firstDow }, (_, i) => <div key={`e${i}`} />)}
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const sel = ds === value;
+                const tdy = ds === today;
+                return (
+                  <button key={day} type="button" onClick={() => pick(day)}
+                    className={`h-9 w-full rounded-lg font-inter text-sm font-medium transition-colors ${
+                      sel ? 'bg-primary text-on-primary' :
+                      tdy ? 'bg-primary/15 text-primary font-semibold' :
+                      'hover:bg-surface-container text-on-surface'
+                    }`}>
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface TaskModalProps {
   open: boolean;
@@ -386,30 +488,25 @@ export default function TaskModal({
           </div>
         </div>
 
-        {/* Due Date + Recurring */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Recurring</label>
-            <select
-              value={recurring}
-              onChange={(e) => setRecurring(e.target.value as RecurringFrequency | '')}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-            >
-              <option value="">Not recurring</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
+        {/* Due Date */}
+        <div className="space-y-1">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Due Date</label>
+          <DatePicker value={dueDate} onChange={setDueDate} />
+        </div>
+
+        {/* Recurring */}
+        <div className="space-y-1">
+          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Recurring</label>
+          <select
+            value={recurring}
+            onChange={(e) => setRecurring(e.target.value as RecurringFrequency | '')}
+            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+          >
+            <option value="">Not recurring</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
         </div>
 
         {/* Start / Deadline time */}

@@ -5,12 +5,10 @@ import { format, parseISO } from 'date-fns';
 import TopBar from '../components/layout/TopBar';
 import FocusTimer from '../components/timer/FocusTimer';
 import { useTasksStore } from '../store/tasksStore';
-import { useNotesStore } from '../store/notesStore';
-import { useFinanceStore } from '../store/financeStore';
 import { useHabitsStore } from '../store/habitsStore';
 import { useSyncStore } from '../store/syncStore';
 import { useCalendarStore } from '../store/calendarStore';
-import { formatCurrency, getTodayString, isOverdue, isDueSoon } from '../utils/dateUtils';
+import { getTodayString, isOverdue, isDueSoon, formatDisplayDate } from '../utils/dateUtils';
 import type { CalendarEvent } from '../services/calendarApi';
 
 const PRIORITY_ICON: Record<string, string> = {
@@ -52,8 +50,6 @@ export default function Dashboard() {
 
   const allTasks = useTasksStore((s) => s.tasks);
   const updateTask = useTasksStore((s) => s.updateTask);
-  const recentNotes = useNotesStore((s) => s.notes).slice(0, 4);
-  const { getMonthlyStats } = useFinanceStore();
   const allHabits = useHabitsStore((s) => s.habits);
   const isHabitCompleted = useHabitsStore((s) => s.isCompleted);
   const { calendarEvents, isTokenValid, syncStatus, syncNow, accessToken } = useSyncStore();
@@ -72,15 +68,9 @@ export default function Dashboard() {
   }, []);
 
   const today = getTodayString();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const monthStats = useMemo(
-    () => getMonthlyStats(year, month + 1),
-    [year, month, getMonthlyStats],
-  );
 
-  // Today's deadline tasks: overdue + due today, sorted by priority weight
   const PRIORITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
+
   const todayDeadlineTasks = useMemo(
     () =>
       tasks
@@ -90,28 +80,47 @@ export default function Dashboard() {
     [tasks],
   );
 
-  // Focus tasks: high/critical + no-deadline tasks
+  // Tasks in the next 30 days with high/critical priority, or overdue tasks not shown in Today
+  const comingUpTasks = useMemo(() => {
+    const todayIds = new Set(todayDeadlineTasks.map((t) => t.id));
+    const in30Days = new Date();
+    in30Days.setDate(in30Days.getDate() + 30);
+    const in30Str = in30Days.toISOString().slice(0, 10);
+
+    return tasks
+      .filter((t) => {
+        if (t.status === 'done' || !t.dueDate || todayIds.has(t.id)) return false;
+        const overdue = isOverdue(t.dueDate);
+        const upcoming = t.dueDate > today && t.dueDate <= in30Str;
+        const important = t.priority === 'critical' || t.priority === 'high';
+        return overdue || (upcoming && important);
+      })
+      .sort((a, b) => {
+        const aOv = isOverdue(a.dueDate);
+        const bOv = isOverdue(b.dueDate);
+        if (aOv !== bOv) return aOv ? -1 : 1;
+        return (a.dueDate ?? '').localeCompare(b.dueDate ?? '');
+      })
+      .slice(0, 7);
+  }, [tasks, todayDeadlineTasks, today]);
+
   const focusTasks = useMemo(
     () =>
       tasks
         .filter(
           (t) =>
             t.status !== 'done' &&
-            (t.priority === 'critical' || t.priority === 'high') &&
-            !todayDeadlineTasks.find((d) => d.id === t.id),
+            !t.dueDate &&
+            (t.priority === 'critical' || t.priority === 'high'),
         )
-        .slice(0, Math.max(0, 3 - todayDeadlineTasks.length)),
-    [tasks, todayDeadlineTasks],
+        .slice(0, 3),
+    [tasks],
   );
 
-  const priorityTaskCount = tasks.filter(
-    (t) => t.status !== 'done' && (t.priority === 'high' || t.priority === 'critical'),
-  ).length;
-
   const tokenValid = isTokenValid();
-  const hasDriveToken = !!accessToken; // had a token at some point
+  const hasDriveToken = !!accessToken;
   const connected = tokenValid || calendarAccounts.length > 0;
-  const driveExpired = hasDriveToken && !tokenValid; // was connected, now expired
+  const driveExpired = hasDriveToken && !tokenValid;
 
   const { mode, setMode, resolvedDark } = useThemeStore();
   const isDark = resolvedDark();
@@ -119,13 +128,14 @@ export default function Dashboard() {
     setMode(mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light');
   }
 
+  const todayIsEmpty = calendarEvents.length === 0 && todayDeadlineTasks.length === 0;
+
   return (
     <div className="bg-background min-h-screen">
       <TopBar
         title="My Dashboard"
         rightSlot={
           <div className="flex items-center gap-1">
-            {/* Dark mode toggle */}
             <button
               onClick={cycleTheme}
               title={`Theme: ${mode} — click to cycle`}
@@ -140,7 +150,7 @@ export default function Dashboard() {
                 onClick={() => syncNow()}
                 disabled={syncStatus === 'syncing'}
                 className="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
-                title={syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'success' ? 'Synced — tap to sync now' : syncStatus === 'error' ? 'Sync failed — tap to retry' : 'Tap to sync'}
+                title={syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync failed — tap to retry' : 'Tap to sync'}
               >
                 <span className={`material-symbols-outlined text-[20px] ${syncStatus === 'syncing' ? 'text-amber-400 animate-spin' : syncStatus === 'success' ? 'text-tertiary' : syncStatus === 'error' ? 'text-error' : 'text-outline-variant'}`}>
                   sync
@@ -158,33 +168,32 @@ export default function Dashboard() {
       />
 
       <main className="max-w-screen-xl mx-auto px-4 pt-5 pb-4 space-y-6">
-        {/* Hero — live clock */}
+
+        {/* Hero — date/day prominent, clock secondary */}
         <section className="pt-1">
-          <p className="font-inter text-xs font-semibold uppercase tracking-widest text-outline mb-1">
-            {format(now, 'EEEE, MMMM d')}
+          <p className="font-manrope font-bold text-2xl text-on-surface leading-tight">
+            {format(now, 'EEEE')}
           </p>
-          <p className="font-manrope font-bold text-on-background tabular-nums" style={{ fontSize: '2.8rem', lineHeight: 1.1 }}>
+          <p className="font-inter font-semibold text-base text-primary">
+            {format(now, 'MMMM d, yyyy')}
+          </p>
+          <p className="font-inter tabular-nums text-sm text-on-surface-variant mt-1">
             {format(now, 'h:mm')}
-            <span className="text-2xl text-on-surface-variant">{format(now, ':ss')}</span>
-            <span className="font-inter font-medium text-xl text-on-surface-variant ml-2">{format(now, 'a')}</span>
+            <span className="text-xs opacity-70">{format(now, ':ss')}</span>
+            <span className="ml-1 text-xs">{format(now, 'a')}</span>
           </p>
-          {priorityTaskCount > 0 && (
-            <p className="font-work-sans text-sm text-on-surface-variant mt-1.5">
-              {priorityTaskCount} high-priority task{priorityTaskCount !== 1 ? 's' : ''} need attention
-            </p>
-          )}
         </section>
 
         {/* Drive session expired banner */}
         {driveExpired && (
           <section
-            className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer"
+            className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer"
             onClick={() => navigate('/calendar')}
           >
             <span className="material-symbols-outlined text-[22px] text-amber-600 shrink-0">sync_problem</span>
             <div className="flex-1">
-              <p className="font-inter font-semibold text-sm text-amber-800">Sync paused — session expired</p>
-              <p className="font-inter text-xs text-amber-700">Tap to reconnect Google and resume syncing</p>
+              <p className="font-inter font-semibold text-sm text-amber-800 dark:text-amber-300">Sync paused — session expired</p>
+              <p className="font-inter text-xs text-amber-700 dark:text-amber-400">Tap to reconnect Google and resume syncing</p>
             </div>
             <span className="material-symbols-outlined text-[18px] text-amber-500">arrow_forward_ios</span>
           </section>
@@ -197,31 +206,128 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Today's Calendar Events */}
-        {connected && calendarEvents.length > 0 && (
-          <section className="space-y-3">
+        {/* Today — unified events + deadlines */}
+        <section className="space-y-2">
+          <div className="flex justify-between items-center">
+            <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary">today</span>
+              Today
+            </h3>
+            {!todayIsEmpty && (
+              <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
+                All tasks
+              </button>
+            )}
+          </div>
+
+          {/* Calendar events */}
+          {connected && calendarEvents.map((ev) => (
+            <div key={ev.id} className="bg-surface-container-lowest rounded-xl px-4 py-3 flex items-center gap-3 shadow-card">
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${CALENDAR_COLORS[ev.colorId ?? ''] ?? 'bg-primary'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-inter font-medium text-sm text-on-surface truncate">{ev.summary}</p>
+                {ev.location && (
+                  <p className="font-inter text-[10px] text-outline truncate">{ev.location}</p>
+                )}
+              </div>
+              <EventTime event={ev} />
+            </div>
+          ))}
+
+          {/* Tasks due today / overdue */}
+          {todayDeadlineTasks.map((task) => (
+            <div
+              key={task.id}
+              className="bg-surface-container-lowest rounded-xl p-4 shadow-card border-l-4 border-l-error cursor-pointer hover:shadow-card-hover transition-shadow"
+              onClick={() => navigate(`/tasks/${task.id}`)}
+            >
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' });
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                    task.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-outline-variant hover:border-primary'
+                  }`}
+                >
+                  {task.status === 'done' && (
+                    <span className="material-symbols-outlined text-[12px] text-on-tertiary icon-fill">check</span>
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-inter font-medium text-sm text-on-surface truncate ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
+                    {task.title}
+                  </p>
+                  <p className={`font-inter text-xs ${isOverdue(task.dueDate) ? 'text-error font-semibold' : 'text-on-surface-variant'}`}>
+                    {isOverdue(task.dueDate) ? '⚠ Overdue' : 'Due today'}
+                  </p>
+                </div>
+                <span className={`material-symbols-outlined text-[18px] ${PRIORITY_COLOR[task.priority]}`}>
+                  {PRIORITY_ICON[task.priority]}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {/* Empty state */}
+          {todayIsEmpty && (
+            <div className="bg-surface-container-lowest rounded-xl px-4 py-5 flex items-center gap-4 shadow-card">
+              <span className="material-symbols-outlined text-[32px] text-tertiary">check_circle</span>
+              <div>
+                <p className="font-inter font-semibold text-sm text-on-surface">All clear for today!</p>
+                <p className="font-inter text-xs text-on-surface-variant">No events or deadlines due today</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Coming Up — important/emergency tasks in the next 30 days + overflow overdue */}
+        {comingUpTasks.length > 0 && (
+          <section className="space-y-2">
             <div className="flex justify-between items-center">
               <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px] text-primary">event</span>
-                Today's Events
+                <span className="material-symbols-outlined text-[18px] text-secondary">upcoming</span>
+                Coming Up
               </h3>
-              <button onClick={() => navigate('/calendar')} className="font-inter text-xs font-semibold text-primary hover:underline">
+              <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
                 View all
               </button>
             </div>
             <div className="space-y-2">
-              {calendarEvents.map((ev) => (
-                <div key={ev.id} className="bg-surface-container-lowest rounded-xl px-4 py-3 flex items-center gap-3 shadow-card">
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${CALENDAR_COLORS[ev.colorId ?? ''] ?? 'bg-primary'}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-inter font-medium text-sm text-on-surface truncate">{ev.summary}</p>
-                    {ev.location && (
-                      <p className="font-inter text-[10px] text-outline truncate">{ev.location}</p>
-                    )}
+              {comingUpTasks.map((task) => {
+                const overdue = isOverdue(task.dueDate);
+                return (
+                  <div
+                    key={task.id}
+                    className={`bg-surface-container-lowest rounded-xl px-4 py-3 shadow-card flex items-center gap-3 cursor-pointer hover:shadow-card-hover transition-shadow ${overdue ? 'border-l-4 border-l-error' : ''}`}
+                    onClick={() => navigate(`/tasks/${task.id}`)}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' });
+                      }}
+                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        task.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-outline-variant hover:border-primary'
+                      }`}
+                    >
+                      {task.status === 'done' && (
+                        <span className="material-symbols-outlined text-[12px] text-on-tertiary icon-fill">check</span>
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-inter font-medium text-sm text-on-surface truncate">{task.title}</p>
+                      <p className={`font-inter text-xs ${overdue ? 'text-error font-semibold' : 'text-on-surface-variant'}`}>
+                        {overdue ? '⚠ Overdue' : formatDisplayDate(task.dueDate!)}
+                      </p>
+                    </div>
+                    <span className={`material-symbols-outlined text-[18px] ${PRIORITY_COLOR[task.priority]}`}>
+                      {PRIORITY_ICON[task.priority]}
+                    </span>
                   </div>
-                  <EventTime event={ev} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -241,62 +347,14 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Today's Deadlines */}
-        {todayDeadlineTasks.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px] text-error">warning</span>
-                Due Today
-              </h3>
-              <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
-                View all
-              </button>
-            </div>
-            <div className="space-y-2">
-              {todayDeadlineTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="bg-surface-container-lowest rounded-xl p-4 shadow-card border-l-4 border-l-error cursor-pointer hover:shadow-card-hover transition-shadow"
-                  onClick={() => navigate(`/tasks/${task.id}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' });
-                      }}
-                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        task.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-outline-variant hover:border-primary'
-                      }`}
-                    >
-                      {task.status === 'done' && (
-                        <span className="material-symbols-outlined text-[12px] text-on-tertiary icon-fill">check</span>
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-inter font-medium text-sm text-on-surface truncate ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
-                        {task.title}
-                      </p>
-                      <p className={`font-inter text-xs ${isOverdue(task.dueDate) ? 'text-error font-semibold' : 'text-on-surface-variant'}`}>
-                        {isOverdue(task.dueDate) ? '⚠ Overdue' : 'Due today'}
-                      </p>
-                    </div>
-                    <span className={`material-symbols-outlined text-[18px] ${PRIORITY_COLOR[task.priority]}`}>
-                      {PRIORITY_ICON[task.priority]}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Today's Focus (high priority, no deadline) */}
+        {/* Focus — high priority tasks with no deadline */}
         {focusTasks.length > 0 && (
           <section className="space-y-3">
             <div className="flex justify-between items-center">
-              <h3 className="font-h3 text-h3 text-on-surface">Today's Focus</h3>
+              <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-secondary">bolt</span>
+                Focus
+              </h3>
               <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
                 View all
               </button>
@@ -335,46 +393,6 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Recent Notes */}
-        <section className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-h3 text-h3 text-on-surface">Recent Notes</h3>
-            <button onClick={() => navigate('/notes')} className="font-inter text-xs font-semibold text-primary hover:underline">
-              View all
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {recentNotes.slice(0, 2).map((note) => (
-              <div
-                key={note.id}
-                onClick={() => navigate('/notes')}
-                className="bg-surface-container-low rounded-xl p-4 aspect-square flex flex-col justify-between cursor-pointer hover:shadow-card-hover transition-shadow"
-              >
-                <span className="material-symbols-outlined text-[22px] text-pink-500">sticky_note_2</span>
-                <div>
-                  <p className="font-inter font-semibold text-sm text-on-background leading-tight">{note.title}</p>
-                  <p className="font-inter text-xs text-on-surface-variant mt-1 truncate">{note.content.slice(0, 40)}</p>
-                </div>
-              </div>
-            ))}
-            {recentNotes.slice(2, 4).map((note) => (
-              <div
-                key={note.id}
-                onClick={() => navigate('/notes')}
-                className="col-span-1 bg-surface-container-lowest rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:shadow-card-hover transition-shadow shadow-card"
-              >
-                <div className="w-9 h-9 bg-surface-container rounded-lg flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[18px] text-tertiary">sticky_note_2</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-inter font-medium text-xs text-on-background truncate">{note.title}</p>
-                  <p className="font-inter text-[10px] text-on-surface-variant">Note</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* Habits Today */}
         <section className="space-y-3">
           <div className="flex justify-between items-center">
@@ -403,40 +421,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Finance Snapshot */}
-        <section
-          className="bg-surface-container-lowest rounded-xl p-4 shadow-card cursor-pointer hover:shadow-card-hover transition-shadow"
-          onClick={() => navigate('/finance')}
-        >
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-inter text-xs font-semibold uppercase tracking-widest text-outline">
-              {format(now, 'MMMM')} Outflow
-            </span>
-            <span className="font-manrope font-bold text-xl text-on-surface">
-              {formatCurrency(monthStats.expenses)}
-            </span>
-          </div>
-          <div className="h-16 flex items-end gap-1">
-            {Array.from({ length: 7 }, (_, i) => {
-              const d = new Date();
-              d.setDate(d.getDate() - (6 - i));
-              const day = d.getDate();
-              const amount = monthStats.byDay.find((b) => b.day === day)?.amount ?? 0;
-              const max = Math.max(...monthStats.byDay.map((b) => b.amount), 1);
-              const height = Math.max((amount / max) * 100, 4);
-              const isToday = i === 6;
-              return (
-                <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                  <div
-                    className={`w-full rounded-t-sm transition-all ${isToday ? 'bg-primary' : 'bg-primary/20'}`}
-                    style={{ height: `${height}%` }}
-                  />
-                  <span className="font-inter text-[9px] text-outline">{format(d, 'EEE').slice(0, 1)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
       </main>
     </div>
   );
