@@ -5,9 +5,7 @@ const NAV_ITEMS = [
   { to: '/notes', label: 'Notes', icon: 'sticky_note_2', iconFill: 'sticky_note_2' },
   { to: '/tasks', label: 'Tasks', icon: 'view_kanban', iconFill: 'view_kanban' },
   { to: '/habits', label: 'Habits', icon: 'track_changes', iconFill: 'track_changes' },
-  { to: '/hobbies', label: 'Hobbies', icon: 'interests', iconFill: 'interests' },
   { to: '/health', label: 'Health', icon: 'monitor_heart', iconFill: 'monitor_heart' },
-  { to: '/finance', label: 'Finance', icon: 'payments', iconFill: 'payments' },
 ];
 
 export default function BottomNav() {

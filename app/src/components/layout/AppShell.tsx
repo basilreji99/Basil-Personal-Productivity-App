@@ -22,9 +22,18 @@ export default function AppShell() {
 
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const pullDistanceRef = useRef(0);
+  const refreshingRef = useRef(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const startY = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Suppress Android WebView long-press context menu (shows app logo overlay)
+  useEffect(() => {
+    const prevent = (e: Event) => e.preventDefault();
+    document.addEventListener('contextmenu', prevent);
+    return () => document.removeEventListener('contextmenu', prevent);
+  }, []);
 
   // Apply dark class to <html>
   useEffect(() => {
@@ -72,23 +81,28 @@ export default function AppShell() {
     function onTouchMove(e: TouchEvent) {
       if (startY.current === null) return;
       const delta = e.touches[0].clientY - startY.current;
-      if (delta <= 0) { setPullDistance(0); return; }
-      setPullDistance(Math.min(delta * 0.4, PULL_THRESHOLD + 16));
+      if (delta <= 0) { setPullDistance(0); pullDistanceRef.current = 0; return; }
+      const d = Math.min(delta * 0.4, PULL_THRESHOLD + 16);
+      setPullDistance(d);
+      pullDistanceRef.current = d;
       if (delta > 10) e.preventDefault();
     }
 
     function onTouchEnd() {
-      if (pullDistance >= PULL_THRESHOLD && !refreshing) {
+      if (pullDistanceRef.current >= PULL_THRESHOLD && !refreshingRef.current) {
         setRefreshing(true);
+        refreshingRef.current = true;
         const { isTokenValid } = useSyncStore.getState();
         if (isTokenValid()) {
-          syncNow().finally(() => setRefreshing(false));
+          syncNow().finally(() => { setRefreshing(false); refreshingRef.current = false; });
         } else {
           setRefreshing(false);
+          refreshingRef.current = false;
         }
       }
       startY.current = null;
       setPullDistance(0);
+      pullDistanceRef.current = 0;
     }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -99,8 +113,7 @@ export default function AppShell() {
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pullDistance, refreshing]);
+  }, [syncNow]);
 
   const isActive = refreshing || syncStatus === 'syncing';
   const indicatorVisible = pullDistance > 8 || isActive;

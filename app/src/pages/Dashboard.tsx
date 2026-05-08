@@ -421,6 +421,61 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* Quick Access */}
+        <section className="space-y-3 pb-4">
+          <h3 className="font-h3 text-h3 text-on-surface">Quick Access</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => navigate('/finance')}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-emerald-600">payments</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Finance</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Budget & transactions</p>
+              </div>
+            </button>
+            <button
+              onClick={() => navigate('/hobbies')}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-violet-600">local_library</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Library</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Books, movies & more</p>
+              </div>
+            </button>
+            <button
+              onClick={() => navigate('/digest')}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-amber-600">summarize</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Weekly Digest</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">This week at a glance</p>
+              </div>
+            </button>
+            <button
+              onClick={() => navigate('/yearly')}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-sky-600">calendar_today</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Yearly Review</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Full year stats</p>
+              </div>
+            </button>
+          </div>
+        </section>
+
       </main>
     </div>
   );

@@ -19,9 +19,12 @@ import Music from './pages/hobbies/Music';
 import Drawing from './pages/hobbies/Drawing';
 import Fitness from './pages/hobbies/Fitness';
 import Books from './pages/hobbies/Books';
+import Gym from './pages/Gym';
+import Travel from './pages/hobbies/Travel';
 import { useFitnessStore } from './store/fitnessStore';
 import { useBooksStore } from './store/booksStore';
-import { parseTokenFromHash } from './services/googleAuth';
+import { useGymStore } from './store/gymStore';
+import { parseTokenFromHash, exchangeCodeForTokens } from './services/googleAuth';
 import { exchangeSpotifyCode } from './services/spotifyAuth';
 import { useHobbyStore } from './store/hobbyStore';
 import { useSyncStore } from './store/syncStore';
@@ -33,6 +36,9 @@ import { useFinanceStore } from './store/financeStore';
 import { useHealthStore } from './store/healthStore';
 import { markLocalDirty, setSuppressDirtyMark, clearLocalDirty } from './services/driveSync';
 import { useSprintStore } from './store/sprintStore';
+import { runHCSync } from './services/hcSync';
+import WeeklyDigest from './pages/WeeklyDigest';
+import YearlyReview from './pages/YearlyReview';
 
 function OAuthHandler() {
   const navigate = useNavigate();
@@ -44,7 +50,7 @@ function OAuthHandler() {
     navigate('/hobbies/music', { replace: true });
   }
 
-  function handleToken(token: string, expiry: number) {
+  function handleToken(token: string, expiry: number, refreshToken?: string | null) {
     const { pendingAddAccount: pending } = useCalendarStore.getState();
     if (pending) {
       useCalendarStore.getState().setPendingAddAccount(false);
@@ -58,7 +64,7 @@ function OAuthHandler() {
       });
       navigate('/calendar', { replace: true });
     } else {
-      setToken(token, expiry).then(() => {
+      setToken(token, expiry, refreshToken).then(() => {
         syncNow();
         fetchCalendar();
         const now = new Date();
@@ -68,6 +74,16 @@ function OAuthHandler() {
       });
       navigate('/', { replace: true });
     }
+  }
+
+  async function handleGoogleCode(code: string) {
+    const verifier = sessionStorage.getItem('google_pkce_verifier');
+    sessionStorage.removeItem('google_pkce_verifier');
+    if (!verifier) return;
+    const { clientId, clientSecret } = useSyncStore.getState();
+    const redirectUri = `${window.location.origin}/`;
+    const result = await exchangeCodeForTokens(code, verifier, clientId, clientSecret, redirectUri);
+    if (result) handleToken(result.accessToken, result.expiry, result.refreshToken);
   }
 
   // Initial load + OAuth callback handling
@@ -82,7 +98,13 @@ function OAuthHandler() {
           if (code) exchangeSpotifyCode(code).then(r => { if (r) handleSpotifyToken(r.token, r.expiry, r.refreshToken); });
           return;
         }
-        // Google OAuth: token in hash
+        // Google OAuth auth code flow: code in query params
+        if (!url.includes('spotify-callback') && url.includes('code=') && !url.includes('access_token=')) {
+          const code = new URL(url).searchParams.get('code');
+          if (code) handleGoogleCode(code);
+          return;
+        }
+        // Google OAuth legacy implicit flow: token in hash (calendar accounts)
         if (!url.includes('access_token=')) return;
         const hash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
         const parsed = parseTokenFromHash(hash);
@@ -90,6 +112,9 @@ function OAuthHandler() {
       });
       // Sync when app comes back to foreground on Android
       let lastAppSync = 0;
+      let lastHCSync = 0;
+      const HC_SYNC_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
+
       const stateListenerPromise = CapApp.addListener('appStateChange', ({ isActive }) => {
         if (!isActive) return;
         const { isTokenValid: valid, accessToken: tok } = useSyncStore.getState();
@@ -102,6 +127,11 @@ function OAuthHandler() {
         const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
         fetchAllEvents(start, end, tok);
+        // Auto HC sync in background if enough time has passed
+        if (Date.now() - lastHCSync > HC_SYNC_INTERVAL) {
+          lastHCSync = Date.now();
+          runHCSync().catch(() => {});
+        }
       });
 
       // Normal startup sync
@@ -115,6 +145,9 @@ function OAuthHandler() {
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
         fetchAllEvents(start, end, accessToken);
       }
+      // Auto HC sync on startup (silent)
+      lastHCSync = Date.now();
+      runHCSync().catch(() => {});
       return () => {
         listenerPromise.then(l => l.remove());
         stateListenerPromise.then(l => l.remove());
@@ -128,7 +161,14 @@ function OAuthHandler() {
         exchangeSpotifyCode(spotifyCode).then(r => { if (r) handleSpotifyToken(r.token, r.expiry, r.refreshToken); });
         return;
       }
-      // On web: Google token arrives in the URL hash after redirect
+      // On web: Google auth code arrives in query string
+      const googleCode = new URLSearchParams(window.location.search).get('code');
+      if (googleCode && !window.location.search.includes('spotify')) {
+        window.history.replaceState(null, '', window.location.pathname + '#/');
+        handleGoogleCode(googleCode);
+        return;
+      }
+      // On web: Google token in hash (calendar implicit flow)
       const hash = window.location.hash;
       if (hash.includes('access_token=') && !hash.startsWith('#/')) {
         const parsed = parseTokenFromHash(hash);
@@ -150,6 +190,18 @@ function OAuthHandler() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Proactively refresh token 5 minutes before it expires
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const { accessToken, tokenExpiry, refreshToken, silentRefresh } = useSyncStore.getState();
+      if (!accessToken || !tokenExpiry || !refreshToken) return;
+      if (Date.now() > tokenExpiry - 5 * 60 * 1000) {
+        await silentRefresh();
+      }
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   // Auto-sync when user switches back to this tab/window (cross-device refresh)
@@ -198,6 +250,7 @@ function OAuthHandler() {
     const stores = [
       useTasksStore, useNotesStore, useHabitsStore, useFinanceStore,
       useHealthStore, useHobbyStore, useFitnessStore, useBooksStore,
+      useGymStore,
     ] as const;
     const unsubs = stores.map(store => store.subscribe(() => markLocalDirty()));
     return () => unsubs.forEach(fn => fn());
@@ -221,6 +274,7 @@ function OAuthHandler() {
     useFitnessStore.persist.rehydrate();
     useBooksStore.persist.rehydrate();
     useSprintStore.persist.rehydrate();
+    useGymStore.persist.rehydrate();
     // Allow dirty marking again after stores have settled
     setTimeout(() => setSuppressDirtyMark(false), 1000);
   }, [needsReload, clearNeedsReload]);
@@ -258,6 +312,10 @@ export default function App() {
           <Route path="/hobbies/drawing" element={<Drawing />} />
           <Route path="/hobbies/fitness" element={<Fitness />} />
           <Route path="/hobbies/books" element={<Books />} />
+          <Route path="/hobbies/gym" element={<Gym />} />
+          <Route path="/hobbies/travel" element={<Travel />} />
+          <Route path="/digest" element={<WeeklyDigest />} />
+          <Route path="/yearly" element={<YearlyReview />} />
         </Route>
       </Routes>
     </HashRouter>

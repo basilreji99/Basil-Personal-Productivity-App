@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotesStore } from '../../store/notesStore';
 import { useTasksStore } from '../../store/tasksStore';
@@ -16,6 +16,8 @@ export default function Streamliner() {
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); }, []);
   const navigate = useNavigate();
   const addNote = useNotesStore((s) => s.addNote);
   const addTask = useTasksStore((s) => s.addTask);
@@ -105,7 +107,7 @@ export default function Streamliner() {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onFocus={() => setFocused(true)}
-              onBlur={() => setTimeout(() => setFocused(false), 150)}
+              onBlur={() => { blurTimerRef.current = setTimeout(() => setFocused(false), 150); }}
               placeholder="Type / for commands or add a quick task..."
               className="streamliner-input text-inverse-on-surface placeholder:text-outline/60 flex-1"
             />

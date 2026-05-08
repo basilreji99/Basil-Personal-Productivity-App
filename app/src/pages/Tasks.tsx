@@ -29,6 +29,137 @@ const ISSUE_CONFIG: Record<IssueType, { label: string; icon: string; color: stri
   subtask: { label: 'Subtask', icon: 'subdirectory_arrow_right', color: 'text-on-surface-variant',              bg: 'bg-surface-container-low'             },
 };
 
+// ─── Epic colour palette (8 hues, light+dark safe) ───────────────────────────
+
+const EPIC_COLORS = [
+  { // 0 purple
+    wrap:        'border-purple-200  dark:border-purple-900/60  bg-purple-50  dark:bg-purple-950/20',
+    drag:        'text-purple-300    dark:text-purple-700',
+    chevron:     'text-purple-500    dark:text-purple-400',
+    icon:        'text-purple-600    dark:text-purple-400',
+    title:       'text-purple-900    dark:text-purple-200',
+    count:       'text-purple-600    dark:text-purple-400  bg-purple-100  dark:bg-purple-950/40',
+    status:      'text-purple-700    dark:text-purple-300  bg-purple-100  dark:bg-purple-950/50  border-purple-300  dark:border-purple-800',
+    checkBorder: 'border-purple-400  dark:border-purple-600',
+    divider:     'border-purple-200  dark:border-purple-900/50',
+    progBg:      'bg-purple-100      dark:bg-purple-900/40',
+    progFill:    'bg-purple-500      dark:bg-purple-400',
+    addBtn:      'text-purple-600    dark:text-purple-400  hover:bg-purple-100  dark:hover:bg-purple-900/30',
+    itemCount:   'text-purple-400    dark:text-purple-600',
+  },
+  { // 1 blue
+    wrap:        'border-blue-200    dark:border-blue-900/60    bg-blue-50    dark:bg-blue-950/20',
+    drag:        'text-blue-300      dark:text-blue-700',
+    chevron:     'text-blue-500      dark:text-blue-400',
+    icon:        'text-blue-600      dark:text-blue-400',
+    title:       'text-blue-900      dark:text-blue-200',
+    count:       'text-blue-600      dark:text-blue-400    bg-blue-100    dark:bg-blue-950/40',
+    status:      'text-blue-700      dark:text-blue-300    bg-blue-100    dark:bg-blue-950/50    border-blue-300    dark:border-blue-800',
+    checkBorder: 'border-blue-400    dark:border-blue-600',
+    divider:     'border-blue-200    dark:border-blue-900/50',
+    progBg:      'bg-blue-100        dark:bg-blue-900/40',
+    progFill:    'bg-blue-500        dark:bg-blue-400',
+    addBtn:      'text-blue-600      dark:text-blue-400    hover:bg-blue-100    dark:hover:bg-blue-900/30',
+    itemCount:   'text-blue-400      dark:text-blue-600',
+  },
+  { // 2 emerald
+    wrap:        'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/20',
+    drag:        'text-emerald-300   dark:text-emerald-700',
+    chevron:     'text-emerald-500   dark:text-emerald-400',
+    icon:        'text-emerald-600   dark:text-emerald-400',
+    title:       'text-emerald-900   dark:text-emerald-200',
+    count:       'text-emerald-600   dark:text-emerald-400  bg-emerald-100 dark:bg-emerald-950/40',
+    status:      'text-emerald-700   dark:text-emerald-300  bg-emerald-100 dark:bg-emerald-950/50  border-emerald-300 dark:border-emerald-800',
+    checkBorder: 'border-emerald-400 dark:border-emerald-600',
+    divider:     'border-emerald-200 dark:border-emerald-900/50',
+    progBg:      'bg-emerald-100     dark:bg-emerald-900/40',
+    progFill:    'bg-emerald-500     dark:bg-emerald-400',
+    addBtn:      'text-emerald-600   dark:text-emerald-400  hover:bg-emerald-100 dark:hover:bg-emerald-900/30',
+    itemCount:   'text-emerald-400   dark:text-emerald-600',
+  },
+  { // 3 amber
+    wrap:        'border-amber-200   dark:border-amber-900/60   bg-amber-50   dark:bg-amber-950/20',
+    drag:        'text-amber-300     dark:text-amber-700',
+    chevron:     'text-amber-500     dark:text-amber-400',
+    icon:        'text-amber-600     dark:text-amber-400',
+    title:       'text-amber-900     dark:text-amber-200',
+    count:       'text-amber-700     dark:text-amber-300    bg-amber-100   dark:bg-amber-950/40',
+    status:      'text-amber-700     dark:text-amber-300    bg-amber-100   dark:bg-amber-950/50    border-amber-300   dark:border-amber-800',
+    checkBorder: 'border-amber-400   dark:border-amber-600',
+    divider:     'border-amber-200   dark:border-amber-900/50',
+    progBg:      'bg-amber-100       dark:bg-amber-900/40',
+    progFill:    'bg-amber-500       dark:bg-amber-400',
+    addBtn:      'text-amber-600     dark:text-amber-400    hover:bg-amber-100    dark:hover:bg-amber-900/30',
+    itemCount:   'text-amber-400     dark:text-amber-600',
+  },
+  { // 4 rose
+    wrap:        'border-rose-200    dark:border-rose-900/60    bg-rose-50    dark:bg-rose-950/20',
+    drag:        'text-rose-300      dark:text-rose-700',
+    chevron:     'text-rose-500      dark:text-rose-400',
+    icon:        'text-rose-600      dark:text-rose-400',
+    title:       'text-rose-900      dark:text-rose-200',
+    count:       'text-rose-600      dark:text-rose-400    bg-rose-100    dark:bg-rose-950/40',
+    status:      'text-rose-700      dark:text-rose-300    bg-rose-100    dark:bg-rose-950/50    border-rose-300    dark:border-rose-800',
+    checkBorder: 'border-rose-400    dark:border-rose-600',
+    divider:     'border-rose-200    dark:border-rose-900/50',
+    progBg:      'bg-rose-100        dark:bg-rose-900/40',
+    progFill:    'bg-rose-500        dark:bg-rose-400',
+    addBtn:      'text-rose-600      dark:text-rose-400    hover:bg-rose-100    dark:hover:bg-rose-900/30',
+    itemCount:   'text-rose-400      dark:text-rose-600',
+  },
+  { // 5 cyan
+    wrap:        'border-cyan-200    dark:border-cyan-900/60    bg-cyan-50    dark:bg-cyan-950/20',
+    drag:        'text-cyan-300      dark:text-cyan-700',
+    chevron:     'text-cyan-500      dark:text-cyan-400',
+    icon:        'text-cyan-600      dark:text-cyan-400',
+    title:       'text-cyan-900      dark:text-cyan-200',
+    count:       'text-cyan-600      dark:text-cyan-400    bg-cyan-100    dark:bg-cyan-950/40',
+    status:      'text-cyan-700      dark:text-cyan-300    bg-cyan-100    dark:bg-cyan-950/50    border-cyan-300    dark:border-cyan-800',
+    checkBorder: 'border-cyan-400    dark:border-cyan-600',
+    divider:     'border-cyan-200    dark:border-cyan-900/50',
+    progBg:      'bg-cyan-100        dark:bg-cyan-900/40',
+    progFill:    'bg-cyan-500        dark:bg-cyan-400',
+    addBtn:      'text-cyan-600      dark:text-cyan-400    hover:bg-cyan-100    dark:hover:bg-cyan-900/30',
+    itemCount:   'text-cyan-400      dark:text-cyan-600',
+  },
+  { // 6 indigo
+    wrap:        'border-indigo-200  dark:border-indigo-900/60  bg-indigo-50  dark:bg-indigo-950/20',
+    drag:        'text-indigo-300    dark:text-indigo-700',
+    chevron:     'text-indigo-500    dark:text-indigo-400',
+    icon:        'text-indigo-600    dark:text-indigo-400',
+    title:       'text-indigo-900    dark:text-indigo-200',
+    count:       'text-indigo-600    dark:text-indigo-400  bg-indigo-100  dark:bg-indigo-950/40',
+    status:      'text-indigo-700    dark:text-indigo-300  bg-indigo-100  dark:bg-indigo-950/50  border-indigo-300  dark:border-indigo-800',
+    checkBorder: 'border-indigo-400  dark:border-indigo-600',
+    divider:     'border-indigo-200  dark:border-indigo-900/50',
+    progBg:      'bg-indigo-100      dark:bg-indigo-900/40',
+    progFill:    'bg-indigo-500      dark:bg-indigo-400',
+    addBtn:      'text-indigo-600    dark:text-indigo-400  hover:bg-indigo-100  dark:hover:bg-indigo-900/30',
+    itemCount:   'text-indigo-400    dark:text-indigo-600',
+  },
+  { // 7 fuchsia
+    wrap:        'border-fuchsia-200 dark:border-fuchsia-900/60 bg-fuchsia-50 dark:bg-fuchsia-950/20',
+    drag:        'text-fuchsia-300   dark:text-fuchsia-700',
+    chevron:     'text-fuchsia-500   dark:text-fuchsia-400',
+    icon:        'text-fuchsia-600   dark:text-fuchsia-400',
+    title:       'text-fuchsia-900   dark:text-fuchsia-200',
+    count:       'text-fuchsia-600   dark:text-fuchsia-400  bg-fuchsia-100 dark:bg-fuchsia-950/40',
+    status:      'text-fuchsia-700   dark:text-fuchsia-300  bg-fuchsia-100 dark:bg-fuchsia-950/50  border-fuchsia-300 dark:border-fuchsia-800',
+    checkBorder: 'border-fuchsia-400 dark:border-fuchsia-600',
+    divider:     'border-fuchsia-200 dark:border-fuchsia-900/50',
+    progBg:      'bg-fuchsia-100     dark:bg-fuchsia-900/40',
+    progFill:    'bg-fuchsia-500     dark:bg-fuchsia-400',
+    addBtn:      'text-fuchsia-600   dark:text-fuchsia-400  hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/30',
+    itemCount:   'text-fuchsia-400   dark:text-fuchsia-600',
+  },
+] as const;
+
+function epicColorIndex(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffffffff;
+  return Math.abs(h) % EPIC_COLORS.length;
+}
+
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   critical: { label: 'Emergency', color: 'text-red-600' },
   high:     { label: 'High',      color: 'text-orange-500' },
@@ -219,12 +350,14 @@ function SortableTaskRow(props: React.ComponentProps<typeof TaskRow>) {
 // ─── EpicSection ─────────────────────────────────────────────────────────────
 
 function EpicSection({
-  epic, tasks, onEdit, onAddChild, dragHandleProps,
+  epic, tasks, onEdit, onAddChild, dragHandleProps, colorIdx,
 }: {
   epic: Task; tasks: Task[]; onEdit: (t: Task) => void;
   onAddChild: (parentId: string, type: IssueType, scopeEpicId?: string) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  colorIdx: number;
 }) {
+  const c = EPIC_COLORS[colorIdx];
   const { updateTask, reorderItems } = useTasksStore();
   const [expanded, setExpanded] = useState(false);
 
@@ -233,11 +366,13 @@ function EpicSection({
     [tasks, epic.id],
   );
 
-  // Progress across ALL descendants
   const descendants = useMemo(() => getDescendants(epic.id, tasks), [epic.id, tasks]);
   const total = descendants.length;
   const done = descendants.filter((t) => t.status === 'done').length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const storyCount = directChildren.filter((item) => item.issueType === 'story').length;
+  const taskCount = directChildren.filter((item) => item.issueType === 'task' || item.issueType === 'bug').length;
 
   const childSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -247,57 +382,62 @@ function EpicSection({
   function handleChildDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIdx = directChildren.findIndex((c) => c.id === active.id);
-    const newIdx = directChildren.findIndex((c) => c.id === over.id);
+    const oldIdx = directChildren.findIndex((item) => item.id === active.id);
+    const newIdx = directChildren.findIndex((item) => item.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    reorderItems(arrayMove(directChildren, oldIdx, newIdx).map((c) => c.id));
+    reorderItems(arrayMove(directChildren, oldIdx, newIdx).map((item) => item.id));
   }
 
   return (
-    <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50 dark:bg-purple-950/20 overflow-hidden">
+    <div className={`rounded-2xl border ${c.wrap} overflow-hidden`}>
       {/* Epic header */}
       <div className="flex items-center gap-2 px-4 py-3">
-        {/* Drag handle for the whole epic */}
         {dragHandleProps && (
           <span
             {...dragHandleProps}
-            className="material-symbols-outlined text-[16px] text-purple-300 dark:text-purple-700 cursor-grab shrink-0 touch-none"
+            className={`material-symbols-outlined text-[16px] ${c.drag} cursor-grab shrink-0 touch-none`}
           >
             drag_indicator
           </span>
         )}
 
-        <button onClick={() => setExpanded((v) => !v)} className="text-purple-500 dark:text-purple-400 shrink-0">
+        <button onClick={() => setExpanded((v) => !v)} className={`${c.chevron} shrink-0`}>
           <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-90' : ''}`}>
             chevron_right
           </span>
         </button>
-        <span className="material-symbols-outlined text-[18px] text-purple-600 dark:text-purple-400 shrink-0">bolt</span>
-        <span
-          className="flex-1 font-inter font-bold text-sm text-purple-900 dark:text-purple-200 cursor-pointer truncate min-w-0"
-          onClick={() => onEdit(epic)}
-        >
-          {epic.title}
-        </span>
+        <span className={`material-symbols-outlined text-[18px] ${c.icon} shrink-0`}>bolt</span>
 
-        {/* Epic due date */}
-        {epic.status !== 'done' && <DueBadge dueDate={epic.dueDate} />}
+        <div className="flex-1 min-w-0 sm:flex sm:items-center sm:gap-2">
+          <span
+            className={`font-inter font-bold text-sm ${c.title} cursor-pointer truncate block sm:flex-1 sm:min-w-0`}
+            onClick={() => onEdit(epic)}
+          >
+            {epic.title}
+          </span>
+          <div className="flex items-center gap-1.5 mt-0.5 sm:mt-0 flex-wrap shrink-0">
+            {epic.status !== 'done' && <DueBadge dueDate={epic.dueDate} />}
+            {(storyCount > 0 || taskCount > 0) && (
+              <span className={`font-inter text-[9px] px-1.5 py-0.5 rounded-full ${c.count}`}>
+                {[
+                  storyCount > 0 && `${storyCount} ${storyCount === 1 ? 'story' : 'stories'}`,
+                  taskCount > 0 && `${taskCount} ${taskCount === 1 ? 'task' : 'tasks'}`,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            )}
+            {total > 0 && (
+              <span className={`font-inter text-[9px] font-bold ${c.icon}`}>{pct}%</span>
+            )}
+            <span className={`font-inter text-[9px] border ${c.status} px-1.5 py-0.5 rounded-full`}>
+              {epic.status.replace('_', ' ')}
+            </span>
+          </div>
+        </div>
 
-        {/* Progress badge */}
-        {total > 0 && (
-          <span className="font-inter text-xs font-bold text-purple-600 dark:text-purple-400 shrink-0">{pct}%</span>
-        )}
-
-        {/* Status */}
-        <span className="font-inter text-xs text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/50 border border-purple-300 dark:border-purple-800 px-2 py-0.5 rounded-full shrink-0">
-          {epic.status.replace('_', ' ')}
-        </span>
-
-        {/* Quick done */}
         <button
           onClick={() => updateTask(epic.id, { status: epic.status === 'done' ? 'todo' : 'done' })}
           className={`shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-            epic.status === 'done' ? 'border-tertiary bg-tertiary' : 'border-purple-400 dark:border-purple-600'
+            epic.status === 'done' ? 'border-tertiary bg-tertiary' : c.checkBorder
           }`}
         >
           {epic.status === 'done' && <span className="material-symbols-outlined text-[9px] text-on-tertiary icon-fill">check</span>}
@@ -308,19 +448,19 @@ function EpicSection({
       {/* Progress bar */}
       {total > 0 && (
         <div className="mx-4 mb-0.5">
-          <div className="h-1 bg-purple-100 dark:bg-purple-900/40 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500 dark:bg-purple-400 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          <div className={`h-1 ${c.progBg} rounded-full overflow-hidden`}>
+            <div className={`h-full ${c.progFill} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
 
       {/* Children + add buttons inside expanded panel */}
       {expanded && (
-        <div className="border-t border-purple-200 dark:border-purple-900/50">
+        <div className={`border-t ${c.divider}`}>
           {directChildren.length > 0 && (
             <div className="px-4 pt-2 pb-1 space-y-1">
               <DndContext sensors={childSensors} collisionDetection={closestCenter} onDragEnd={handleChildDragEnd}>
-                <SortableContext items={directChildren.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={directChildren.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                   {directChildren.map((child) => (
                     <SortableTaskRow
                       key={child.id}
@@ -339,19 +479,19 @@ function EpicSection({
           <div className="flex items-center gap-2 px-4 py-2">
             <button
               onClick={() => onAddChild(epic.id, 'story', epic.id)}
-              className="flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
+              className={`flex items-center gap-1 ${c.addBtn} rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold`}
             >
               <span className="material-symbols-outlined text-[14px]">add</span>
               Story
             </button>
             <button
               onClick={() => onAddChild(epic.id, 'task', epic.id)}
-              className="flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold"
+              className={`flex items-center gap-1 ${c.addBtn} rounded-lg px-2 py-1 transition-colors font-inter text-xs font-semibold`}
             >
               <span className="material-symbols-outlined text-[14px]">add</span>
               Task
             </button>
-            <span className="font-inter text-xs text-purple-400 dark:text-purple-600 ml-auto">{directChildren.length} items</span>
+            <span className={`font-inter text-xs ${c.itemCount} ml-auto`}>{directChildren.length} items</span>
           </div>
         </div>
       )}
@@ -381,12 +521,16 @@ function SortableEpicSection(props: React.ComponentProps<typeof EpicSection>) {
 
 function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit: (t: Task) => void }) {
   const { moveTask, columns } = useTasksStore();
+  const { sprints } = useSprintStore();
   const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
   const pri = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.none;
   const parent = task.parentId ? tasks.find((t) => t.id === task.parentId) : null;
-  const sortedCols = [...columns].sort((a, b) => a.order - b.order);
-  const curIdx = sortedCols.findIndex((c) => c.id === task.status);
-  const nextCol = curIdx >= 0 && curIdx < sortedCols.length - 1 ? sortedCols[curIdx + 1] : null;
+  const sprint = task.sprintId ? sprints.find((s) => s.id === task.sprintId) : null;
+
+  const nonBacklogCols = [...columns].sort((a, b) => a.order - b.order).filter((c) => c.id !== 'backlog');
+  const colIdx = nonBacklogCols.findIndex((c) => c.id === task.status);
+  const prevCol = colIdx > 0 ? nonBacklogCols[colIdx - 1] : null;
+  const nextCol = colIdx >= 0 && colIdx < nonBacklogCols.length - 1 ? nonBacklogCols[colIdx + 1] : null;
 
   return (
     <div className="bg-surface-container-lowest rounded-xl p-3 shadow-card border border-outline-variant/10">
@@ -404,7 +548,7 @@ function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit:
           {task.title}
         </p>
       </div>
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
         {task.priority !== 'none' && (
           <span className={`font-inter text-[10px] font-semibold ${pri.color}`}>{pri.label}</span>
         )}
@@ -413,7 +557,20 @@ function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit:
             {task.storyPoints}pt
           </span>
         )}
+        {sprint && (
+          <span className="font-inter text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full truncate max-w-[80px]" title={sprint.name}>
+            ⚡ {sprint.name}
+          </span>
+        )}
         <div className="flex-1" />
+        {prevCol && (
+          <button
+            onClick={() => moveTask(task.id, prevCol.id)}
+            className="font-inter text-[10px] font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full"
+          >
+            ← {prevCol.name}
+          </button>
+        )}
         {nextCol && (
           <button
             onClick={() => moveTask(task.id, nextCol.id)}
@@ -522,11 +679,118 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
   );
 }
 
+// ─── CompleteSprintModal ──────────────────────────────────────────────────────
+
+function CompleteSprintModal({ open, sprint, incompleteTasks, nextSprint, onClose }: {
+  open: boolean;
+  sprint: Sprint | null;
+  incompleteTasks: Task[];
+  nextSprint: Sprint | null;
+  onClose: () => void;
+}) {
+  const { updateTask } = useTasksStore();
+  const { updateSprint } = useSprintStore();
+  const [destinations, setDestinations] = useState<Record<string, 'backlog' | 'next'>>({});
+
+  useEffect(() => {
+    if (open) {
+      const defaults: Record<string, 'backlog' | 'next'> = {};
+      incompleteTasks.forEach((t) => { defaults[t.id] = nextSprint ? 'next' : 'backlog'; });
+      setDestinations(defaults);
+    }
+  }, [open, incompleteTasks, nextSprint]);
+
+  const handleConfirm = () => {
+    if (!sprint) return;
+    incompleteTasks.forEach((t) => {
+      const dest = destinations[t.id] ?? 'backlog';
+      updateTask(t.id, {
+        sprintId: dest === 'next' && nextSprint ? nextSprint.id : null,
+        status: dest === 'backlog' ? 'backlog' : t.status,
+      });
+    });
+    updateSprint(sprint.id, { status: 'completed' });
+    onClose();
+  };
+
+  if (!sprint) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Complete Sprint">
+      <div className="space-y-4">
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+          <p className="font-inter font-semibold text-sm text-on-surface">{sprint.name}</p>
+          <p className="font-inter text-xs text-outline mt-0.5">{sprint.startDate} → {sprint.endDate}</p>
+        </div>
+
+        {incompleteTasks.length === 0 ? (
+          <div className="text-center py-4">
+            <span className="material-symbols-outlined text-[32px] text-tertiary block mb-2">check_circle</span>
+            <p className="font-inter font-semibold text-sm text-on-surface">All tasks completed!</p>
+            <p className="font-inter text-xs text-on-surface-variant mt-1">Great sprint — nothing left to roll over.</p>
+          </div>
+        ) : (
+          <div>
+            <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline mb-2">
+              {incompleteTasks.length} incomplete — where should they go?
+            </p>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {incompleteTasks.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 bg-surface-container rounded-xl px-3 py-2">
+                  <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).color}`}>
+                    {(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
+                  </span>
+                  <span className="flex-1 font-work-sans text-sm text-on-surface truncate">{t.title}</span>
+                  <div className="flex gap-1 shrink-0">
+                    {nextSprint && (
+                      <button
+                        onClick={() => setDestinations((d) => ({ ...d, [t.id]: 'next' }))}
+                        className={`px-2 py-0.5 rounded-lg font-inter text-[10px] font-semibold transition-colors ${
+                          destinations[t.id] === 'next'
+                            ? 'bg-primary text-on-primary'
+                            : 'bg-surface-container-high text-on-surface-variant hover:bg-primary/10'
+                        }`}
+                      >
+                        Next Sprint
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDestinations((d) => ({ ...d, [t.id]: 'backlog' }))}
+                      className={`px-2 py-0.5 rounded-lg font-inter text-[10px] font-semibold transition-colors ${
+                        destinations[t.id] === 'backlog'
+                          ? 'bg-surface-container-high text-on-surface'
+                          : 'bg-surface-container text-outline hover:bg-surface-container-high'
+                      }`}
+                    >
+                      Backlog
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose}
+            className="flex-1 py-2 rounded-xl border border-outline-variant/30 text-on-surface-variant font-inter text-sm font-medium">
+            Cancel
+          </button>
+          <button onClick={handleConfirm}
+            className="flex-1 py-2 rounded-xl bg-primary text-on-primary font-inter text-sm font-semibold">
+            {incompleteTasks.length === 0 ? 'Complete Sprint' : 'Confirm & Complete'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main Tasks page ──────────────────────────────────────────────────────────
 
 export default function Tasks() {
   const { tasks, columns, addTask, updateTask, reorderItems } = useTasksStore();
-  const { sprints, activeSprint, deleteSprint, updateSprint } = useSprintStore();
+  const { sprints, activeSprint, deleteSprint } = useSprintStore();
   const pinnedTags = useTagStore((s) => s.pinned);
   const tagUsage = useTagStore((s) => s.usage);
   const filterTags = useMemo(() => {
@@ -552,6 +816,7 @@ export default function Tasks() {
   const [dumpInput, setDumpInput] = useState('');
   const [dumpExpanded, setDumpExpanded] = useState(true);
   const [showSprintTaskPicker, setShowSprintTaskPicker] = useState(false);
+  const [completeSprintOpen, setCompleteSprintOpen] = useState(false);
 
   const epicSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -570,6 +835,10 @@ export default function Tasks() {
     return list;
   }, [tasks, activeTag, filterPriority, filterDue]);
 
+  const allEpics = useMemo(
+    () => tasks.filter((t) => t.issueType === 'epic' && !t.parentId),
+    [tasks],
+  );
   const epics = useMemo(
     () => filteredTasks.filter((t) => t.issueType === 'epic' && !t.parentId).sort((a, b) => a.order - b.order),
     [filteredTasks],
@@ -635,8 +904,16 @@ export default function Tasks() {
   const sprintDone = sprintTasks.filter((t) => t.status === 'done').length;
   const sprintPct = sprintTasks.length > 0 ? Math.round((sprintDone / sprintTasks.length) * 100) : 0;
   const unassignedTasks = useMemo(
-    () => tasks.filter((t) => !t.sprintId && t.issueType !== 'epic' && t.status !== 'done'),
+    () => tasks.filter((t) => !t.sprintId && t.status !== 'done'),
     [tasks],
+  );
+  const incompleteSprintTasks = useMemo(
+    () => (currentSprint ? sprintTasks.filter((t) => t.status !== 'done') : []),
+    [currentSprint, sprintTasks],
+  );
+  const nextSprint = useMemo(
+    () => sprints.filter((s) => s.status === 'planned').sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null,
+    [sprints],
   );
 
   const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
@@ -763,7 +1040,7 @@ export default function Tasks() {
           {['All', ...filterTags].map((tag) => (
             <button
               key={tag}
-              onClick={() => setActiveTag(tag)}
+              onClick={() => setActiveTag(activeTag === tag && tag !== 'All' ? 'All' : tag)}
               className={`flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full border font-inter font-semibold text-xs uppercase tracking-wide transition-all ${
                 activeTag === tag
                   ? 'bg-primary text-on-primary border-primary'
@@ -794,7 +1071,7 @@ export default function Tasks() {
           ].map(({ value, label, color }) => (
             <button
               key={value}
-              onClick={() => setFilterPriority(value)}
+              onClick={() => setFilterPriority(filterPriority === value && value !== 'all' ? 'all' : value)}
               className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
                 filterPriority === value
                   ? value === 'all' ? 'bg-on-surface text-surface border-on-surface' : color + ' ring-1 ring-current/30'
@@ -836,7 +1113,7 @@ export default function Tasks() {
               ].map(({ value, label }) => (
                 <button
                   key={value}
-                  onClick={() => setFilterDue(value)}
+                  onClick={() => setFilterDue(filterDue === value && value !== 'all' ? 'all' : value)}
                   className={`flex-shrink-0 px-2.5 py-1 rounded-full border font-inter text-[11px] font-semibold transition-all ${
                     filterDue === value
                       ? value === 'overdue' ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800' : value === 'week' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800' : 'bg-on-surface text-surface border-on-surface'
@@ -916,13 +1193,14 @@ export default function Tasks() {
                       tasks={filteredTasks}
                       onEdit={openEdit}
                       onAddChild={handleAddChild}
+                      colorIdx={epicColorIndex(epic.id)}
                     />
                   ))}
                 </div>
               </SortableContext>
             </DndContext>
 
-            {epics.length === 0 && (
+            {epics.length === 0 && allEpics.length === 0 && (
               <div className="text-center py-4">
                 <p className="font-inter text-sm text-on-surface-variant mb-2">No Epics yet</p>
                 <button
@@ -930,6 +1208,17 @@ export default function Tasks() {
                   className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-300 rounded-xl font-inter text-sm font-semibold"
                 >
                   + Create your first Epic
+                </button>
+              </div>
+            )}
+            {epics.length === 0 && allEpics.length > 0 && (
+              <div className="text-center py-4 space-y-2">
+                <p className="font-inter text-sm text-on-surface-variant">No epics match this filter</p>
+                <button
+                  onClick={() => { setActiveTag('All'); setFilterPriority('all'); setFilterDue('all'); }}
+                  className="px-4 py-1.5 rounded-lg border border-outline-variant text-on-surface-variant font-inter text-xs font-semibold hover:border-primary/40"
+                >
+                  Clear filters
                 </button>
               </div>
             )}
@@ -992,10 +1281,10 @@ export default function Tasks() {
 
                 {/* Complete sprint button */}
                 <button
-                  onClick={() => updateSprint(currentSprint.id, { status: 'completed' })}
+                  onClick={() => setCompleteSprintOpen(true)}
                   className="w-full py-2 rounded-xl border border-primary/30 text-primary font-inter text-sm font-semibold hover:bg-primary/10 transition-colors"
                 >
-                  Complete Sprint
+                  Complete Sprint →
                 </button>
               </div>
             ) : (
@@ -1038,13 +1327,43 @@ export default function Tasks() {
               </div>
             )}
 
-            {/* Sprint tasks */}
-            {currentSprint && sprintTasks.length > 0 && (
-              <div className="space-y-1">
-                <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-1">Sprint Tasks</p>
-                {sprintTasks.sort((a, b) => a.order - b.order).map((task) => (
-                  <TaskRow key={task.id} task={task} depth={0} tasks={tasks} onEdit={openEdit} onAddChild={handleAddChild} />
-                ))}
+            {/* Sprint kanban board */}
+            {currentSprint && (
+              <div className="lg:grid lg:grid-cols-4 lg:gap-3 lg:items-start space-y-3 lg:space-y-0">
+                {boardColumns.map((col) => {
+                  const colTasks = sprintTasks.filter((t) => t.status === col.id);
+                  const isDone = col.id === 'done';
+                  const collapsed = collapsedSections.has(`sprint-${col.id}`);
+                  return (
+                    <div key={col.id} className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
+                      <button
+                        onClick={() => toggleSection(`sprint-${col.id}`)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container/60 transition-colors"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                        <span className="font-inter font-semibold text-sm text-on-surface flex-1 text-left uppercase tracking-wide">{col.name}</span>
+                        <span className="font-inter text-xs text-outline font-bold bg-surface-container px-2 py-0.5 rounded-full">{colTasks.length}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openNew(col.id); }}
+                          className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">add</span>
+                        </button>
+                        <span className={`material-symbols-outlined text-[18px] text-outline transition-transform ${collapsed ? '' : 'rotate-180'}`}>expand_more</span>
+                      </button>
+                      {!collapsed && (
+                        <div className={`px-4 pb-4 space-y-2 border-t border-outline-variant/20 pt-2 ${isDone ? 'opacity-70' : ''}`}>
+                          {colTasks.map((task) => (
+                            <BoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} />
+                          ))}
+                          {colTasks.length === 0 && (
+                            <p className="font-inter text-xs text-outline text-center py-3">Empty</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1067,7 +1386,10 @@ export default function Tasks() {
                         </span>
                         <span className="flex-1 font-work-sans text-sm text-on-surface truncate">{t.title}</span>
                         <button
-                          onClick={() => updateTask(t.id, { sprintId: currentSprint.id })}
+                          onClick={() => updateTask(t.id, {
+                            sprintId: currentSprint.id,
+                            status: t.status === 'backlog' ? 'todo' : t.status,
+                          })}
                           className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary rounded-lg font-inter text-xs font-semibold"
                         >
                           Add
@@ -1240,6 +1562,13 @@ export default function Tasks() {
         open={sprintModalOpen}
         sprint={editSprint}
         onClose={() => { setSprintModalOpen(false); setEditSprint(null); }}
+      />
+      <CompleteSprintModal
+        open={completeSprintOpen}
+        sprint={currentSprint ?? null}
+        incompleteTasks={incompleteSprintTasks}
+        nextSprint={nextSprint}
+        onClose={() => setCompleteSprintOpen(false)}
       />
     </div>
   );

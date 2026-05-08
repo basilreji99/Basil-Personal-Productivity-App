@@ -343,7 +343,7 @@ export const useHabitsStore = create<HabitsState>()(
     }),
     {
       name: 'productivity-habits',
-      version: 3,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const s = persisted as { habits?: Habit[]; entries?: HabitEntry[] };
         let habits  = s?.habits  ?? DEFAULT_HABITS;
@@ -354,7 +354,7 @@ export const useHabitsStore = create<HabitsState>()(
         }
 
         if (version < 3) {
-          // Seed historical gym entries (h-gym habit)
+          // Seed historical gym entries (h-gym habit) — fresh install only
           const gymDates = [
             '2026-02-27','2026-03-01','2026-03-09','2026-03-12','2026-03-16',
             '2026-03-19','2026-03-23','2026-03-25','2026-03-27','2026-03-30',
@@ -392,13 +392,82 @@ export const useHabitsStore = create<HabitsState>()(
             { date: '2026-03-31', notes: 'Swimming & Basketball' },
             { date: '2026-04-03', notes: 'Swimming' },
             { date: '2026-04-09', notes: 'Swimming' },
+            { date: '2026-04-11', notes: 'Cricket' },
             { date: '2026-04-16', notes: 'Swimming' },
             { date: '2026-05-05', notes: 'Swimming' },
+            { date: '2026-05-06', notes: 'Swimming' },
           ];
           for (const { date, notes } of sportEntries) {
             if (!entries.some(e => e.habitId === 'h-sport' && e.date === date)) {
               entries = [...entries, { habitId: 'h-sport', date, completed: true, notes }];
             }
+          }
+        }
+
+        if (version < 4) {
+          // Replace gym and sport habit history with corrected dataset
+          entries = entries.filter(e => e.habitId !== 'h-gym' && e.habitId !== 'h-sport');
+
+          const gymDates = [
+            '2026-02-27','2026-03-01','2026-03-09','2026-03-12','2026-03-16',
+            '2026-03-19','2026-03-23','2026-03-25','2026-03-27','2026-03-30',
+            '2026-04-01','2026-04-03','2026-04-06','2026-04-08','2026-04-10',
+            '2026-04-15','2026-04-16',
+          ];
+          const gymNotes: Record<string, string> = {
+            '2026-02-27': 'Push, Chest & Triceps', '2026-03-01': 'Back & Biceps',
+            '2026-03-09': 'Push, Chest & Triceps', '2026-03-12': 'Back & Biceps',
+            '2026-03-16': 'Push, Chest & Triceps', '2026-03-19': 'Back & Biceps',
+            '2026-03-23': 'Push, Chest & Triceps', '2026-03-25': 'Back & Biceps',
+            '2026-03-27': 'Legs & Core',           '2026-03-30': 'Push, Chest & Triceps',
+            '2026-04-01': 'Back & Biceps',          '2026-04-03': 'Legs & Core',
+            '2026-04-06': 'Push, Chest & Triceps',  '2026-04-08': 'Back & Biceps',
+            '2026-04-10': 'Legs & Core',            '2026-04-15': 'Push, Chest & Triceps',
+            '2026-04-16': 'Legs & Core',
+          };
+          for (const date of gymDates) {
+            entries = [...entries, { habitId: 'h-gym', date, completed: true, notes: gymNotes[date] }];
+          }
+
+          const sportEntries: { date: string; notes: string }[] = [
+            { date: '2026-01-11', notes: 'Cricket' },
+            { date: '2026-03-13', notes: 'Swimming' },
+            { date: '2026-03-14', notes: 'Cricket' },
+            { date: '2026-03-16', notes: 'Swimming' },
+            { date: '2026-03-17', notes: 'Swimming' },
+            { date: '2026-03-18', notes: 'Swimming' },
+            { date: '2026-03-19', notes: 'Swimming' },
+            { date: '2026-03-21', notes: 'Cricket' },
+            { date: '2026-03-29', notes: 'Cricket' },
+            { date: '2026-03-31', notes: 'Swimming & Basketball' },
+            { date: '2026-04-03', notes: 'Swimming' },
+            { date: '2026-04-09', notes: 'Swimming' },
+            { date: '2026-04-11', notes: 'Cricket' },
+            { date: '2026-04-16', notes: 'Swimming' },
+            { date: '2026-05-05', notes: 'Swimming' },
+            { date: '2026-05-06', notes: 'Swimming' },
+          ];
+          for (const { date, notes } of sportEntries) {
+            entries = [...entries, { habitId: 'h-sport', date, completed: true, notes }];
+          }
+        }
+
+        if (version < 5) {
+          // Restore h-treat if user accidentally deleted it
+          if (!habits.some(h => h.id === 'h-treat')) {
+            habits = [...habits, {
+              id: 'h-treat',
+              name: 'Buy Yourself Something Nice',
+              description: 'Monthly self-treat',
+              frequency: 'monthly' as HabitFrequency,
+              color: 'pink' as HabitColor,
+              icon: 'shopping_bag',
+              targetDays: 1,
+              hasNotes: true,
+              notesPrompt: 'What did you get?',
+              createdAt: new Date().toISOString(),
+              archivedAt: null,
+            }];
           }
         }
 

@@ -68,7 +68,7 @@ function toYMD(date: Date) {
 
 export default function Calendar() {
   const {
-    profile, clientId, setClientId, startAuth, clearAuth,
+    profile, clientId, setClientId, clientSecret, setClientSecret, startAuth, clearAuth,
     syncNow, fetchCalendar, accessToken, isTokenValid,
     syncStatus, lastSyncedAt,
   } = useSyncStore();
@@ -129,8 +129,10 @@ export default function Calendar() {
   const [calView, setCalView] = useState<'month' | 'agenda'>('month');
   const [eventModal, setEventModal] = useState<{ open: boolean; event?: LocalEvent; defaultDate?: string }>({ open: false });
   const [inputId, setInputId] = useState(clientId);
+  const [inputSecret, setInputSecret] = useState(clientSecret);
   const [showSetup, setShowSetup] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const [showSecretEdit, setShowSecretEdit] = useState(false);
 
   const primaryToken = isTokenValid() ? accessToken : null;
   const connected = !!primaryToken;
@@ -209,6 +211,7 @@ export default function Calendar() {
 
   function handleConnect() {
     setClientId(inputId.trim());
+    setClientSecret(inputSecret.trim());
     setTimeout(() => startAuth(), 50);
   }
 
@@ -308,6 +311,31 @@ export default function Calendar() {
                     </button>
                   </div>
                 </div>
+                {/* Client secret entry (for persistent login) */}
+                <button
+                  onClick={() => setShowSecretEdit(v => !v)}
+                  className="w-full text-xs text-on-surface-variant font-inter text-left flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">{showSecretEdit ? 'expand_less' : 'expand_more'}</span>
+                  {clientSecret ? 'Update client secret' : 'Add client secret (persistent login)'}
+                </button>
+                {showSecretEdit && (
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={inputSecret}
+                      onChange={e => setInputSecret(e.target.value)}
+                      placeholder="Paste Client Secret"
+                      className="flex-1 bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 font-inter text-sm text-on-surface placeholder:text-on-surface-variant outline-none focus:border-primary"
+                    />
+                    <button
+                      onClick={() => { setClientSecret(inputSecret.trim()); setShowSecretEdit(false); }}
+                      className="px-3 py-2 rounded-xl bg-primary text-on-primary font-inter text-sm font-semibold"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
                 {!connected && (
                   <button
                     onClick={handleConnect}
@@ -327,6 +355,13 @@ export default function Calendar() {
                   placeholder="Paste your Google OAuth Client ID"
                   className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 font-inter text-sm text-on-surface placeholder:text-on-surface-variant outline-none focus:border-primary"
                 />
+                <input
+                  type="password"
+                  value={inputSecret}
+                  onChange={e => setInputSecret(e.target.value)}
+                  placeholder="Paste your Client Secret (for persistent login)"
+                  className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 font-inter text-sm text-on-surface placeholder:text-on-surface-variant outline-none focus:border-primary"
+                />
                 <button
                   onClick={handleConnect}
                   disabled={!inputId.trim()}
@@ -338,7 +373,7 @@ export default function Calendar() {
                   onClick={() => setShowSetup(v => !v)}
                   className="w-full text-xs text-primary font-inter text-center"
                 >
-                  {showSetup ? 'Hide setup ▲' : 'How to get a Client ID? ▼'}
+                  {showSetup ? 'Hide setup ▲' : 'How to set this up? ▼'}
                 </button>
                 {showSetup && (
                   <div className="bg-surface-container-low rounded-xl p-3 space-y-2 text-xs font-inter text-on-surface-variant">
@@ -347,12 +382,13 @@ export default function Calendar() {
                       <li>Go to <span className="text-primary">console.cloud.google.com</span></li>
                       <li>Create a project → enable <strong className="text-on-surface">Google Calendar API</strong> + <strong className="text-on-surface">Drive API</strong></li>
                       <li>APIs &amp; Services → OAuth consent screen → External, add yourself as test user</li>
-                      <li>Add scopes: <code className="bg-surface-container px-1 rounded">drive.appdata</code> and <code className="bg-surface-container px-1 rounded">calendar.readonly</code></li>
-                      <li>Credentials → Create → OAuth 2.0 Client ID → Web application</li>
+                      <li>Add scopes: <code className="bg-surface-container px-1 rounded">drive.appdata</code>, <code className="bg-surface-container px-1 rounded">calendar.readonly</code>, <code className="bg-surface-container px-1 rounded">spreadsheets</code></li>
+                      <li>Credentials → Create → OAuth 2.0 Client ID → <strong className="text-on-surface">Web application</strong></li>
                       <li>Authorised JS origins: <code className="bg-surface-container px-1 rounded">http://localhost</code></li>
                       <li>Authorised redirect URIs: <code className="bg-surface-container px-1 rounded">http://localhost/</code></li>
-                      <li>Copy the <strong className="text-on-surface">Client ID</strong> and paste above</li>
+                      <li>Copy both the <strong className="text-on-surface">Client ID</strong> and <strong className="text-on-surface">Client Secret</strong> and paste above</li>
                     </ol>
+                    <p className="text-primary font-medium mt-1">The Client Secret enables persistent login — you only sign in once.</p>
                   </div>
                 )}
               </div>

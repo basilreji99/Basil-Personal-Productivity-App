@@ -1,8 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/layout/TopBar';
 import Modal from '../components/ui/Modal';
+import { Capacitor } from '@capacitor/core';
 import { useHealthStore } from '../store/healthStore';
 import { useFitnessStore } from '../store/fitnessStore';
+import { HealthConnect } from '../services/healthConnect';
+import { runHCSync } from '../services/hcSync';
+import { syncHealthToSheets } from '../services/sheetsService';
+import { useSyncStore } from '../store/syncStore';
 import type { BodyMeasurement } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -454,53 +460,93 @@ function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
-// ─── Fitness History Modal ────────────────────────────────────────────────────
-
-function FitnessHistoryModal({ open, onClose, title, children }: {
-  open: boolean; onClose: () => void; title: string; children: React.ReactNode;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} title={title} size="sm">
-      <div className="max-h-[70vh] overflow-y-auto divide-y divide-outline-variant/10">
-        {children}
-      </div>
-    </Modal>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const TYPE_COLORS: Record<string, string> = {
-  'Push, Chest & Triceps': '#f97316',
-  'Back & Biceps':         '#8b5cf6',
-  'Legs & Core':           '#22c55e',
-};
-const SPORT_COLORS: Record<string, string> = {
-  'Cricket':    '#22c55e',
-  'Swimming':   '#3b82f6',
-  'Basketball': '#f97316',
-};
-
-function gymColor(type: string)  { return TYPE_COLORS[type]  ?? '#737686'; }
-function sportColor(sport: string) { return SPORT_COLORS[sport] ?? '#737686'; }
-
-function fmtFitDate(d: string) {
-  return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 export default function Health() {
+  const navigate = useNavigate();
   const { measurements, profile, getLatest, calcBMI } = useHealthStore();
   const { gymSessions, sportSessions } = useFitnessStore();
+  const hcLastSync = localStorage.getItem('basil-hc-last-sync');
   const [logOpen, setLogOpen]         = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editEntry, setEditEntry]     = useState<BodyMeasurement | null>(null);
   const [metricModal, setMetricModal] = useState<MetricConfig | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const [gymHistoryOpen, setGymHistoryOpen]     = useState(false);
-  const [sportHistoryOpen, setSportHistoryOpen] = useState(false);
+  const [hcSyncing, setHcSyncing]     = useState(false);
+  const [hcStatus, setHcStatus]       = useState<string | null>(null);
+  const [hcNeedsSetup, setHcNeedsSetup] = useState(false);
 
-  const sortedGym   = useMemo(() => [...gymSessions].sort((a, b) => b.date.localeCompare(a.date)), [gymSessions]);
-  const sortedSport = useMemo(() => [...sportSessions].sort((a, b) => b.date.localeCompare(a.date)), [sportSessions]);
+  const isNative = Capacitor.isNativePlatform();
+
+  // Auto-sync from Health Connect when Health page opens, if >4h since last sync
+  useEffect(() => {
+    if (!isNative) return;
+    const FOUR_HOURS = 4 * 60 * 60 * 1000;
+    const lastSyncStr = localStorage.getItem('basil-hc-last-sync');
+    const lastSync = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
+    if (Date.now() - lastSync < FOUR_HOURS) return;
+    runHCSync().then(({ imported }) => {
+      if (imported > 0) setHcStatus(`Auto-synced ${imported} records from Health Connect`);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNative]);
+
+  const syncFromHealthConnect = useCallback(async () => {
+    setHcSyncing(true);
+    setHcStatus(null);
+    setHcNeedsSetup(false);
+    try {
+      // Check availability first
+      const avail = await HealthConnect.checkAvailability().catch(() => null);
+      if (!avail || avail.status === 'unavailable') {
+        setHcStatus('Health Connect not available on this device');
+        return;
+      }
+      if (avail.status === 'update_required') {
+        setHcStatus('Health Connect app needs to be updated');
+        return;
+      }
+
+      // Request permissions if not granted
+      let perms = await HealthConnect.checkHCPermissions().catch(() => null);
+      if (!perms?.granted) {
+        perms = await HealthConnect.requestHCPermissions().catch(() => null);
+      }
+      if (!perms?.granted) {
+        setHcStatus('Tap below to open Health Connect and grant permissions, then return and tap Sync.');
+        setHcNeedsSetup(true);
+        return;
+      }
+
+      // Run the full sync (body measurements + sleep + exercise)
+      const { imported, error } = await runHCSync();
+      if (error && error !== 'permissions_missing') {
+        setHcStatus(`Sync failed: ${error}`);
+        return;
+      }
+
+      // Sync to Google Sheets if token is available
+      const { accessToken, isTokenValid } = useSyncStore.getState();
+      if (isTokenValid() && accessToken) {
+        setHcStatus(`HC synced (${imported} records) — updating Sheets…`);
+        const freshMeasurements = useHealthStore.getState().measurements;
+        const sheetsResult = await syncHealthToSheets(accessToken, freshMeasurements, profile.height ?? 0);
+        if (sheetsResult.error) {
+          setHcStatus(`HC synced (${imported} records) · Sheets: ${sheetsResult.error}`);
+        } else if (sheetsResult.synced > 0) {
+          setHcStatus(`Sync complete — ${imported} HC records · ${sheetsResult.synced} new rows → Sheets`);
+        } else {
+          setHcStatus(`Sync complete — ${imported} records · Sheets up to date`);
+        }
+      } else {
+        setHcStatus(`Sync complete — ${imported} records imported`);
+      }
+    } catch (e: unknown) {
+      setHcStatus(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setHcSyncing(false);
+    }
+  }, [profile.height]);
 
   const gymStats = useMemo(() => {
     const now = new Date();
@@ -623,6 +669,19 @@ export default function Health() {
                   <p className="font-manrope font-bold text-2xl text-violet-700">{latest.muscleMass}<span className="text-xs font-normal ml-0.5">kg</span></p>
                 </button>
               )}
+
+              {/* BMR — full width */}
+              {latest.bmr !== undefined && (
+                <button onClick={() => setMetricModal(METRIC_CONFIGS[5])}
+                  className="col-span-2 bg-pink-50 dark:bg-pink-950/30 rounded-xl p-3 flex items-center gap-3 text-left hover:scale-[1.01] transition-transform active:scale-95">
+                  <span className="material-symbols-outlined text-[22px] text-pink-500">local_fire_department</span>
+                  <div className="flex-1">
+                    <p className="font-inter text-[10px] text-pink-500 font-semibold uppercase tracking-wide">BMR</p>
+                    <p className="font-manrope font-bold text-2xl text-pink-700">{latest.bmr}<span className="text-xs font-normal ml-0.5">kcal</span></p>
+                  </div>
+                  <p className="font-inter text-xs text-pink-400">Basal Metabolic Rate</p>
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -638,12 +697,11 @@ export default function Health() {
 
         {/* Secondary metrics row */}
         {latest && (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { cfg: METRIC_CONFIGS[4], val: latest.bodyWater, unit: '%', label: 'Water' },
-              { cfg: METRIC_CONFIGS[5], val: latest.bmr,       unit: 'kcal', label: 'BMR' },
-              { cfg: METRIC_CONFIGS[6], val: latest.visceralFat, unit: '', label: 'Visceral' },
-              { cfg: METRIC_CONFIGS[7], val: latest.protein,   unit: '%', label: 'Protein' },
+              { cfg: METRIC_CONFIGS[4], val: latest.bodyWater,   unit: '%', label: 'Water' },
+              { cfg: METRIC_CONFIGS[6], val: latest.visceralFat, unit: '',  label: 'Visceral' },
+              { cfg: METRIC_CONFIGS[7], val: latest.protein,     unit: '%', label: 'Protein' },
             ].filter(x => x.val !== undefined).map(({ cfg, val, unit, label }) => (
               <button key={cfg.key} onClick={() => setMetricModal(cfg)}
                 className="bg-surface-container-lowest rounded-xl p-2.5 text-center hover:scale-[1.03] transition-transform active:scale-95 shadow-sm">
@@ -744,81 +802,87 @@ export default function Health() {
           </div>
         )}
 
-        {/* ── Gym Stats ── */}
-        <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-          <div className="px-4 py-3 border-b border-outline-variant/20 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-primary">fitness_center</span>
-            <p className="font-inter font-semibold text-sm text-on-surface flex-1">Gym Workouts</p>
-            {sortedGym.length > 3 && (
-              <button onClick={() => setGymHistoryOpen(true)} className="font-inter text-xs text-primary font-semibold">
-                View all ({sortedGym.length})
-              </button>
-            )}
-          </div>
-          <div className="px-4 py-3 grid grid-cols-3 gap-2 border-b border-outline-variant/10">
-            <div className="text-center">
-              <p className="font-manrope font-bold text-lg text-primary">{gymStats.total}</p>
-              <p className="font-inter text-[9px] text-outline">Total</p>
-            </div>
-            <div className="text-center">
-              <p className="font-manrope font-bold text-lg text-on-surface">{gymStats.monthly}</p>
-              <p className="font-inter text-[9px] text-outline">This Month</p>
-            </div>
-            <div className="text-center">
-              <p className="font-manrope font-bold text-[11px] text-on-surface leading-tight mt-0.5 px-1">{gymStats.fav.split(',')[0]}</p>
-              <p className="font-inter text-[9px] text-outline">Favourite</p>
-            </div>
-          </div>
-          <div className="divide-y divide-outline-variant/10">
-            {sortedGym.slice(0, 3).map(s => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: gymColor(s.type) }} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-inter text-sm font-semibold text-on-surface">{s.type}</p>
-                  <p className="font-inter text-xs text-outline">{fmtFitDate(s.date)}</p>
-                </div>
+        {/* ── Fitness Hub ── */}
+        <div className="space-y-2">
+          <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-1">Fitness</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => navigate('/hobbies/fitness')}
+              className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-orange-600">fitness_center</span>
               </div>
-            ))}
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Fitness & Sports</p>
+                <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">
+                  {gymStats.monthly} gym · {sportStats.monthly} sport this month
+                </p>
+              </div>
+              <span className="font-inter text-[10px] font-semibold text-orange-600">{gymStats.total} gym · {sportStats.total} sport total</span>
+            </button>
+            <button
+              onClick={() => navigate('/hobbies/gym')}
+              className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-violet-600">exercise</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Workout Tracker</p>
+                <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">Sets, reps & weights</p>
+              </div>
+              <span className="font-inter text-[10px] font-semibold text-violet-600">Track detailed workouts</span>
+            </button>
           </div>
         </div>
 
-        {/* ── Sports Stats ── */}
-        <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-          <div className="px-4 py-3 border-b border-outline-variant/20 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-primary">sports_soccer</span>
-            <p className="font-inter font-semibold text-sm text-on-surface flex-1">Sports</p>
-            {sortedSport.length > 3 && (
-              <button onClick={() => setSportHistoryOpen(true)} className="font-inter text-xs text-primary font-semibold">
-                View all ({sortedSport.length})
+        {/* ── Health Connect Sync ── */}
+        {isNative && (
+          <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-green-50 dark:bg-green-950/30 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[20px] text-green-600">sync</span>
+              </div>
+              <div className="flex-1">
+                <p className="font-inter font-semibold text-sm text-on-surface">Health Connect</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Sync weight, body fat & workouts from Health Connect</p>
+              </div>
+              <button
+                onClick={syncFromHealthConnect}
+                disabled={hcSyncing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary rounded-lg font-inter font-medium text-xs disabled:opacity-60"
+              >
+                <span className={`material-symbols-outlined text-[14px] ${hcSyncing ? 'animate-spin' : ''}`}>
+                  {hcSyncing ? 'progress_activity' : 'sync'}
+                </span>
+                {hcSyncing ? 'Syncing…' : 'Sync Now'}
+              </button>
+            </div>
+            {hcStatus && (
+              <p
+                className={`font-inter text-xs rounded-lg px-3 py-2 select-all cursor-text ${hcStatus.includes('failed') || hcStatus.includes('not granted') || hcStatus.includes('not available') || hcStatus.includes('needs') ? 'bg-error-container/20 text-error' : 'bg-tertiary/10 text-tertiary'}`}
+              >
+                {hcStatus}
+              </p>
+            )}
+            {hcNeedsSetup && (
+              <button
+                onClick={() => HealthConnect.openHealthConnect().catch(() => {})}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-surface-container text-primary font-inter font-medium text-xs"
+              >
+                <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                Grant permissions in Health Connect
               </button>
             )}
+            {hcLastSync && (
+              <p className="font-inter text-[10px] text-outline mt-1">
+                Last synced: {new Date(hcLastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
-          <div className="px-4 py-3 grid grid-cols-3 gap-2 border-b border-outline-variant/10">
-            <div className="text-center">
-              <p className="font-manrope font-bold text-lg text-primary">{sportStats.total}</p>
-              <p className="font-inter text-[9px] text-outline">Total</p>
-            </div>
-            <div className="text-center">
-              <p className="font-manrope font-bold text-lg text-on-surface">{sportStats.monthly}</p>
-              <p className="font-inter text-[9px] text-outline">This Month</p>
-            </div>
-            <div className="text-center">
-              <p className="font-manrope font-bold text-sm text-on-surface leading-tight mt-0.5">{sportStats.fav}</p>
-              <p className="font-inter text-[9px] text-outline">Favourite</p>
-            </div>
-          </div>
-          <div className="divide-y divide-outline-variant/10">
-            {sortedSport.slice(0, 3).map(s => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: sportColor(s.sport) }} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-inter text-sm font-semibold text-on-surface">{s.sport}</p>
-                  <p className="font-inter text-xs text-outline">{fmtFitDate(s.date)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
+
 
       </main>
 
@@ -833,29 +897,6 @@ export default function Health() {
       <MetricModal config={metricModal} open={!!metricModal} onClose={() => setMetricModal(null)}
         measurements={measurements} calcBMI={calcBMI} />
 
-      <FitnessHistoryModal open={gymHistoryOpen} onClose={() => setGymHistoryOpen(false)} title="Gym History">
-        {sortedGym.map(s => (
-          <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: gymColor(s.type) }} />
-            <div className="flex-1 min-w-0">
-              <p className="font-inter font-semibold text-sm text-on-surface">{s.type}</p>
-              <p className="font-inter text-xs text-outline">{fmtFitDate(s.date)}{s.duration ? ` · ${s.duration} min` : ''}</p>
-            </div>
-          </div>
-        ))}
-      </FitnessHistoryModal>
-
-      <FitnessHistoryModal open={sportHistoryOpen} onClose={() => setSportHistoryOpen(false)} title="Sports History">
-        {sortedSport.map(s => (
-          <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: sportColor(s.sport) }} />
-            <div className="flex-1 min-w-0">
-              <p className="font-inter font-semibold text-sm text-on-surface">{s.sport}</p>
-              <p className="font-inter text-xs text-outline">{fmtFitDate(s.date)}{s.notes ? ` · ${s.notes}` : ''}</p>
-            </div>
-          </div>
-        ))}
-      </FitnessHistoryModal>
     </div>
   );
 }

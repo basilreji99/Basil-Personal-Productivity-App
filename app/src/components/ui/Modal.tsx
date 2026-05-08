@@ -19,10 +19,12 @@ const sizeClass = {
 
 export default function Modal({ open, onClose, title, children, size = 'md', hideHeader = false }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     if (open) {
       document.addEventListener('keydown', handleKey);
@@ -32,7 +34,7 @@ export default function Modal({ open, onClose, title, children, size = 'md', hid
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

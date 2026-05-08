@@ -283,6 +283,81 @@ export interface ReadingListItem {
   addedAt: string;
 }
 
+// ─── Gym Tracker ─────────────────────────────────────────────────────────────
+
+export type MuscleGroup =
+  | 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms'
+  | 'core' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'full_body' | 'cardio' | 'other';
+
+export type Equipment =
+  | 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'bands' | 'kettlebell' | 'other';
+
+export interface GymExercise {
+  id: string;
+  name: string;
+  muscleGroup: MuscleGroup;
+  equipment: Equipment;
+  isCustom?: boolean;
+}
+
+export interface GymSet {
+  id: string;
+  weight: number;    // kg
+  reps: number;
+  restSeconds?: number;
+  isWarmup?: boolean;
+  completedAt?: string;
+}
+
+export interface GymExerciseEntry {
+  id: string;
+  exerciseId: string;
+  sets: GymSet[];
+  notes?: string;
+}
+
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  exercises: GymExerciseEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GymSession {
+  id: string;
+  name: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationSeconds?: number;
+  exercises: GymExerciseEntry[];
+  notes?: string;
+  totalVolume?: number;  // kg × reps across all sets
+  totalSets?: number;
+  calories?: number;
+  source?: 'manual' | 'health_connect'; // HC-imported sessions
+  hcExerciseType?: number;
+}
+
+// ─── Sleep ───────────────────────────────────────────────────────────────────
+
+export interface SleepStage {
+  start: string;
+  end: string;
+  stage: number; // 0=unknown,1=awake,2=sleeping,3=out_of_bed,4=light,5=deep,6=REM
+}
+
+export interface SleepSession {
+  id: string;
+  start: string;
+  end: string;
+  durationMinutes: number;
+  title?: string;
+  stages: SleepStage[];
+  source: 'manual' | 'health_connect';
+  notes?: string;
+}
+
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 export type SearchResultType = 'note' | 'task' | 'habit' | 'transaction';

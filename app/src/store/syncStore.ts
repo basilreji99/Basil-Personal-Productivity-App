@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { buildAuthUrl, fetchGoogleProfile, openAuthUrl } from '../services/googleAuth';
+import { buildAuthCodeUrl, fetchGoogleProfile, openAuthUrl, refreshAccessToken } from '../services/googleAuth';
 import {
   uploadBackup, downloadBackup, applyBackupToLocalStorage,
   getLocalSyncedAt, setLocalSyncedAt,
@@ -18,8 +18,10 @@ type SyncStatus = 'idle' | 'syncing' | 'success' | 'error' | 'offline';
 
 interface SyncState {
   clientId: string;
+  clientSecret: string;
   accessToken: string | null;
   tokenExpiry: number | null;
+  refreshToken: string | null;
   profile: GoogleProfile | null;
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
@@ -28,10 +30,12 @@ interface SyncState {
   needsReload: boolean;
 
   setClientId: (id: string) => void;
-  setToken: (token: string, expiry: number) => Promise<void>;
+  setClientSecret: (secret: string) => void;
+  setToken: (token: string, expiry: number, refreshToken?: string | null) => Promise<void>;
   clearAuth: () => void;
   isTokenValid: () => boolean;
-  startAuth: () => void;
+  startAuth: () => Promise<void>;
+  silentRefresh: () => Promise<boolean>;
 
   syncNow: () => Promise<void>;
   fetchCalendar: () => Promise<void>;
@@ -42,8 +46,10 @@ export const useSyncStore = create<SyncState>()(
   persist(
     (set, get) => ({
       clientId: '',
+      clientSecret: '',
       accessToken: null,
       tokenExpiry: null,
+      refreshToken: null,
       profile: null,
       syncStatus: 'idle',
       lastSyncedAt: null,
@@ -52,17 +58,25 @@ export const useSyncStore = create<SyncState>()(
       needsReload: false,
 
       setClientId: (clientId) => set({ clientId }),
+      setClientSecret: (clientSecret) => set({ clientSecret }),
 
-      setToken: async (accessToken, tokenExpiry) => {
-        set({ accessToken, tokenExpiry });
-        const profile = await fetchGoogleProfile(accessToken);
-        set({ profile });
+      setToken: async (accessToken, tokenExpiry, refreshToken) => {
+        try {
+          const update: Partial<SyncState> = { accessToken, tokenExpiry };
+          if (refreshToken !== undefined) update.refreshToken = refreshToken;
+          set(update);
+          const profile = await fetchGoogleProfile(accessToken);
+          set({ profile });
+        } catch {
+          set({ accessToken: null, tokenExpiry: null, profile: null });
+        }
       },
 
       clearAuth: () =>
         set({
           accessToken: null,
           tokenExpiry: null,
+          refreshToken: null,
           profile: null,
           syncStatus: 'idle',
           calendarEvents: [],
@@ -74,18 +88,31 @@ export const useSyncStore = create<SyncState>()(
         return !!accessToken && !!tokenExpiry && Date.now() < tokenExpiry;
       },
 
-      startAuth: () => {
+      silentRefresh: async () => {
+        const { refreshToken, clientId, clientSecret } = get();
+        if (!refreshToken || !clientId.trim()) return false;
+        const result = await refreshAccessToken(refreshToken, clientId, clientSecret);
+        if (!result) return false;
+        set({ accessToken: result.accessToken, tokenExpiry: result.expiry });
+        return true;
+      },
+
+      startAuth: async () => {
         const { clientId } = get();
         if (!clientId.trim()) return;
-        openAuthUrl(buildAuthUrl(clientId.trim()));
+        const url = await buildAuthCodeUrl(clientId.trim());
+        openAuthUrl(url);
       },
 
       syncNow: async () => {
-        const { accessToken, isTokenValid } = get();
-        if (!isTokenValid() || !accessToken) {
-          set({ syncStatus: 'error' });
-          return;
+        const { isTokenValid, silentRefresh } = get();
+        if (!isTokenValid()) {
+          const refreshed = await silentRefresh();
+          if (!refreshed) { set({ syncStatus: 'error' }); return; }
         }
+        const { accessToken } = get();
+        if (!accessToken) { set({ syncStatus: 'error' }); return; }
+
         if (!navigator.onLine) {
           set({ syncStatus: 'offline' });
           return;
@@ -93,18 +120,13 @@ export const useSyncStore = create<SyncState>()(
 
         set({ syncStatus: 'syncing' });
         try {
-          // Phase 1: push if this device has changes that Drive doesn't have yet.
           if (isLocalDirty()) {
             const uploadedTs = await uploadBackup(accessToken);
             if (uploadedTs === null) { set({ syncStatus: 'error' }); return; }
             clearLocalDirty();
-            // Set localSyncedAt to the exact timestamp embedded in the backup so
-            // that the phase-2 comparison doesn't falsely re-pull our own data.
             setLocalSyncedAt(uploadedTs);
           }
 
-          // Phase 2: always download to check if another device pushed something
-          // newer (handles laptop→phone and phone→laptop in the same pass).
           const localTs = getLocalSyncedAt();
           const driveBackup = await downloadBackup(accessToken);
           if (driveBackup && driveBackup._syncedAt > localTs) {
@@ -120,8 +142,13 @@ export const useSyncStore = create<SyncState>()(
       },
 
       fetchCalendar: async () => {
-        const { accessToken, isTokenValid } = get();
-        if (!isTokenValid() || !accessToken || !navigator.onLine) return;
+        const { isTokenValid, silentRefresh } = get();
+        if (!isTokenValid()) {
+          const refreshed = await silentRefresh();
+          if (!refreshed) return;
+        }
+        const { accessToken } = get();
+        if (!accessToken || !navigator.onLine) return;
         try {
           const [today, upcoming] = await Promise.all([
             getTodayEvents(accessToken),
@@ -139,8 +166,10 @@ export const useSyncStore = create<SyncState>()(
       name: 'basil-sync',
       partialize: (s) => ({
         clientId: s.clientId,
+        clientSecret: s.clientSecret,
         accessToken: s.accessToken,
         tokenExpiry: s.tokenExpiry,
+        refreshToken: s.refreshToken,
         profile: s.profile,
         lastSyncedAt: s.lastSyncedAt,
         calendarEvents: s.calendarEvents,

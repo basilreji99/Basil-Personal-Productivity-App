@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/layout/TopBar';
 import { useHobbyStore } from '../store/hobbyStore';
-import { useFitnessStore } from '../store/fitnessStore';
 import { useBooksStore } from '../store/booksStore';
 
 const CATEGORIES = [
@@ -33,15 +32,6 @@ const CATEGORIES = [
     border: 'border-red-100 dark:border-red-900/50',
   },
   {
-    path: '/hobbies/fitness',
-    icon: 'fitness_center',
-    label: 'Fitness & Sports',
-    description: 'Gym sessions and sports history',
-    color: '#f97316',
-    bg: 'bg-orange-50 dark:bg-orange-950/30',
-    border: 'border-orange-100 dark:border-orange-900/50',
-  },
-  {
     path: '/hobbies/books',
     icon: 'menu_book',
     label: 'Books',
@@ -50,25 +40,33 @@ const CATEGORIES = [
     bg: 'bg-cyan-50 dark:bg-cyan-950/30',
     border: 'border-cyan-100 dark:border-cyan-900/50',
   },
+  {
+    path: '/hobbies/travel',
+    icon: 'travel_explore',
+    label: 'Travel',
+    description: 'Places visited and travel log',
+    color: '#14b8a6',
+    bg: 'bg-teal-50 dark:bg-teal-950/30',
+    border: 'border-teal-100 dark:border-teal-900/50',
+  },
 ];
 
 export default function Hobbies() {
   const navigate = useNavigate();
   const { reviews, watchlist, artworks } = useHobbyStore();
-  const { gymSessions, sportSessions } = useFitnessStore();
   const { reviews: bookReviews, readingList } = useBooksStore();
 
   const counts = [
     reviews.length > 0 ? `${reviews.filter(r => r.rating >= 8).length} highly rated` : 'No data yet',
     `${artworks.length} pieces`,
     `${reviews.length} reviews · ${watchlist.length} watchlist`,
-    `${gymSessions.length} gym · ${sportSessions.length} sport`,
     `${bookReviews.length} reviews · ${readingList.length} to read`,
+    'Coming soon',
   ];
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Hobbies" />
+      <TopBar title="Library" />
 
       <main className="max-w-screen-xl mx-auto px-4 py-6 pb-28 space-y-4">
         <div className="space-y-3">

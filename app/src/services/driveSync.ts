@@ -11,6 +11,8 @@ const STORE_KEYS = [
   'basil-calendar',
   'basil-hobbies',
   'basil-fitness',
+  'basil-books',
+  'gym-store',
 ];
 
 export interface DriveBackup {

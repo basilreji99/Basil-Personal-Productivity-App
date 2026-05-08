@@ -16,7 +16,11 @@ export default function TopBar({ title = 'Productivity', showBack = false, right
 
   return (
     <>
-      <header className="bg-surface-container-lowest border-b border-outline-variant/30 sticky top-0 z-40 backdrop-blur-sm" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      <header
+        className="bg-surface-container-lowest border-b border-outline-variant/30 sticky top-0 z-40 backdrop-blur-sm select-none"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div className="flex justify-between items-center w-full px-4 h-14 max-w-screen-xl mx-auto">
           <div className="flex items-center gap-3">
             {showBack && (
@@ -45,8 +49,11 @@ export default function TopBar({ title = 'Productivity', showBack = false, right
               <span className="material-symbols-outlined text-[22px]">search</span>
             </button>
             {rightSlot}
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1">
-              <span className="text-white font-inter font-semibold text-xs">B</span>
+            <div
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"
+              draggable={false}
+            >
+              <span className="text-white font-inter font-semibold text-xs select-none">B</span>
             </div>
           </div>
         </div>

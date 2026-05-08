@@ -139,13 +139,15 @@ export default function Notes() {
 
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [activeTag, setActiveTag] = useState<string>('All');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [editNote, setEditNote] = useState<Note | null>(null);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editFolder, setEditFolder] = useState<NoteFolder | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number; folderId: string } | null>(null);
-  const [viewMode, setViewMode] = useState<NoteViewMode>(
+  const [view, setView] = useState<'folders' | NoteViewMode>(
     () => (localStorage.getItem('notes-view') as NoteViewMode) ?? 'masonry',
   );
 
@@ -181,9 +183,16 @@ export default function Notes() {
     }
   };
 
-  const cycleView = (mode: NoteViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem('notes-view', mode);
+  const cycleView = (mode: 'folders' | NoteViewMode) => {
+    setView(mode);
+    if (mode !== 'folders') localStorage.setItem('notes-view', mode);
+  };
+
+  const openFolder = (folderId: string | null) => {
+    setActiveFolder(folderId);
+    setActiveTag('All');
+    const lastView = (localStorage.getItem('notes-view') as NoteViewMode) ?? 'masonry';
+    setView(lastView);
   };
 
   const filtered = useMemo(() => {
@@ -191,10 +200,18 @@ export default function Notes() {
       ? notes
       : notes.filter((n) => n.folderId === activeFolder);
     if (activeTag !== 'All') list = list.filter((n) => n.tags.includes(activeTag));
-    const pinned = list.filter((n) => n.pinned);
-    const unpinned = list.filter((n) => !n.pinned);
+    const cmp = sortOrder === 'newest'
+      ? (a: typeof notes[0], b: typeof notes[0]) => b.createdAt.localeCompare(a.createdAt)
+      : (a: typeof notes[0], b: typeof notes[0]) => a.createdAt.localeCompare(b.createdAt);
+    const pinned = list.filter((n) => n.pinned).sort(cmp);
+    const unpinned = list.filter((n) => !n.pinned).sort(cmp);
     return [...pinned, ...unpinned];
-  }, [notes, activeFolder, activeTag]);
+  }, [notes, activeFolder, activeTag, sortOrder]);
+
+  const folderNoteCounts = useMemo(
+    () => Object.fromEntries(folders.map(f => [f.id, notes.filter(n => n.folderId === f.id).length])),
+    [notes, folders],
+  );
 
   const handleEdit = (note: Note) => { setEditNote(note); setModalOpen(true); };
 
@@ -205,6 +222,8 @@ export default function Notes() {
   };
 
   const openNew = () => { setEditNote(null); setModalOpen(true); };
+
+  const hasActiveFilter = activeTag !== 'All' || sortOrder !== 'newest';
 
   const menuFolder = menuAnchor ? folders.find(f => f.id === menuAnchor.folderId) : null;
   const menuFolderIdx = menuAnchor ? folders.findIndex(f => f.id === menuAnchor.folderId) : -1;
@@ -217,20 +236,30 @@ export default function Notes() {
           <div className="flex items-center gap-1">
             <div className="flex items-center bg-surface-container rounded-lg p-0.5 gap-0.5">
               {([
-                { mode: 'list' as NoteViewMode, icon: 'format_list_bulleted', label: 'List' },
-                { mode: 'grid' as NoteViewMode, icon: 'grid_view', label: 'Grid' },
-                { mode: 'masonry' as NoteViewMode, icon: 'view_agenda', label: 'Cards' },
+                { mode: 'folders' as const, icon: 'folder', label: 'Folders' },
+                { mode: 'list' as const, icon: 'format_list_bulleted', label: 'List' },
+                { mode: 'grid' as const, icon: 'grid_view', label: 'Grid' },
+                { mode: 'masonry' as const, icon: 'view_agenda', label: 'Cards' },
               ]).map(({ mode, icon, label }) => (
                 <button
                   key={mode}
                   onClick={() => cycleView(mode)}
                   title={label}
-                  className={`p-1 rounded-md transition-all ${viewMode === mode ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  className={`p-1 rounded-md transition-all ${view === mode ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
                 >
                   <span className="material-symbols-outlined text-[18px]">{icon}</span>
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setFilterPanelOpen(v => !v)}
+              className={`relative p-1.5 rounded-xl transition-colors ${filterPanelOpen ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+            >
+              <span className="material-symbols-outlined text-[20px]">filter_list</span>
+              {hasActiveFilter && !filterPanelOpen && (
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary" />
+              )}
+            </button>
             <button onClick={() => setTagManagerOpen(true)} className="p-1.5 rounded-xl text-on-surface-variant">
               <span className="material-symbols-outlined text-[20px]">label</span>
             </button>
@@ -239,7 +268,7 @@ export default function Notes() {
       />
 
       {/* Sticky filter section: folder bar + tag chips */}
-      <div className="sticky top-14 z-30 bg-surface-container-low shadow-sm" style={{ top: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
+      {view !== 'folders' && <div className="sticky top-14 z-30 bg-surface-container-low shadow-sm" style={{ top: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
 
         {/* Folder bar — DnD sortable */}
         <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar items-center border-b border-outline-variant/25">
@@ -282,39 +311,128 @@ export default function Notes() {
           </button>
         </div>
 
-        {/* Tag filter row */}
-        <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar border-b border-outline-variant/25">
-          {['All', ...filterTags].map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setActiveTag(tag)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full font-inter font-semibold text-xs uppercase tracking-wide border transition-all duration-200 ${
-                activeTag === tag
-                  ? 'bg-primary text-on-primary border-primary'
-                  : 'border-outline-variant/60 text-on-surface-variant bg-surface-container-lowest/60 hover:border-primary/50 hover:text-primary'
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
+        {/* Collapsible filter panel */}
+        {filterPanelOpen && (
+          <div className="border-t border-outline-variant/25 px-4 py-3 space-y-3 bg-surface-container-low">
+            {/* Sort */}
+            <div className="flex items-center gap-3">
+              <span className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline w-10 shrink-0">Sort</span>
+              <div className="flex gap-2">
+                {([
+                  { value: 'newest', label: 'Newest first', icon: 'arrow_downward' },
+                  { value: 'oldest', label: 'Oldest first', icon: 'arrow_upward' },
+                ] as const).map(({ value, label, icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setSortOrder(value)}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full border font-inter text-xs font-semibold transition-all ${
+                      sortOrder === value
+                        ? 'bg-primary text-on-primary border-primary'
+                        : 'border-outline-variant/60 text-on-surface-variant hover:border-primary/50'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[12px]">{icon}</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Tags */}
+            <div className="flex items-start gap-3">
+              <span className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline w-10 shrink-0 pt-1.5">Tag</span>
+              <div className="flex gap-2 flex-wrap">
+                {['All', ...filterTags].map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setActiveTag(tag)}
+                    className={`flex-shrink-0 px-3 py-1 rounded-full font-inter font-semibold text-xs uppercase tracking-wide border transition-all duration-200 ${
+                      activeTag === tag
+                        ? 'bg-primary text-on-primary border-primary'
+                        : 'border-outline-variant/60 text-on-surface-variant bg-surface-container-lowest/60 hover:border-primary/50 hover:text-primary'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Clear */}
+            {hasActiveFilter && (
+              <button
+                onClick={() => { setActiveTag('All'); setSortOrder('newest'); }}
+                className="text-xs font-inter font-semibold text-primary hover:underline"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
+      </div>}
 
       {/* Notes content */}
-      <main className="max-w-screen-xl mx-auto px-4 py-4">
-        {filtered.length === 0 ? (
+      <main className="max-w-screen-xl mx-auto px-4 py-4 pb-36">
+        {view === 'folders' ? (
+          <>
+            <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline mb-3">
+              {folders.length} folder{folders.length !== 1 ? 's' : ''} · {notes.length} notes total
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {/* All Notes card */}
+              <button
+                onClick={() => openFolder(null)}
+                className="bg-primary/10 rounded-2xl p-5 flex flex-col items-center gap-2 hover:bg-primary/15 active:scale-[0.97] transition-all text-center"
+              >
+                <span className="material-symbols-outlined text-[40px] text-primary">notes</span>
+                <p className="font-manrope font-bold text-sm text-on-surface">All Notes</p>
+                <p className="font-inter text-xs text-on-surface-variant">{notes.length} note{notes.length !== 1 ? 's' : ''}</p>
+              </button>
+
+              {/* Folder cards */}
+              {folders.map((folder) => (
+                <div key={folder.id} className="relative group">
+                  <button
+                    onClick={() => openFolder(folder.id)}
+                    className="w-full bg-surface-container rounded-2xl p-5 flex flex-col items-center gap-2 hover:bg-surface-container-high active:scale-[0.97] transition-all text-center"
+                  >
+                    <span className="text-4xl leading-none">{folder.emoji}</span>
+                    <p className="font-manrope font-bold text-sm text-on-surface truncate w-full">{folder.name}</p>
+                    <p className="font-inter text-xs text-on-surface-variant">
+                      {folderNoteCounts[folder.id] ?? 0} note{(folderNoteCounts[folder.id] ?? 0) !== 1 ? 's' : ''}
+                    </p>
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => handleMenuClick(e, folder)}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-surface-container-highest transition-all"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">more_vert</span>
+                  </button>
+                </div>
+              ))}
+
+              {/* New folder card */}
+              <button
+                onClick={() => { setEditFolder(null); setFolderModalOpen(true); }}
+                className="rounded-2xl p-5 flex flex-col items-center gap-2 active:scale-[0.97] transition-all text-center border-2 border-dashed border-outline-variant/40 hover:border-primary/40 hover:bg-primary/5"
+              >
+                <span className="material-symbols-outlined text-[40px] text-outline">create_new_folder</span>
+                <p className="font-inter text-sm text-on-surface-variant font-medium">New Folder</p>
+              </button>
+            </div>
+          </>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <span className="material-symbols-outlined text-[48px] text-outline mb-3">sticky_note_2</span>
             <p className="font-manrope font-semibold text-on-surface mb-1">No notes yet</p>
             <p className="font-work-sans text-sm text-on-surface-variant">Tap + to create your first note</p>
           </div>
-        ) : viewMode === 'list' ? (
+        ) : view === 'list' ? (
           <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card">
             {filtered.map((note) => (
               <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
             ))}
           </div>
-        ) : viewMode === 'grid' ? (
+        ) : view === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {filtered.map((note) => (
               <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />
