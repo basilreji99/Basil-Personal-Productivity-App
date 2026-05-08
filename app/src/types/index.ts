@@ -75,6 +75,7 @@ export interface Task {
   dueDate: string | null;
   startTime?: string;    // HH:MM on the due date
   deadlineTime?: string; // HH:MM on the due date
+  notificationOffsets?: ('2h' | '1h' | '30min')[];
   recurring: Recurring | null;
   events: TaskEvent[];
   order: number;

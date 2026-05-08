@@ -137,6 +137,7 @@ export default function Notes() {
     return Object.entries(tagUsage).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [pinnedTags, tagUsage]);
 
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [activeTag, setActiveTag] = useState<string>('All');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
@@ -200,13 +201,20 @@ export default function Notes() {
       ? notes
       : notes.filter((n) => n.folderId === activeFolder);
     if (activeTag !== 'All') list = list.filter((n) => n.tags.includes(activeTag));
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((n) =>
+        n.title.toLowerCase().includes(q) ||
+        (n.content ?? '').replace(/<[^>]*>/g, ' ').toLowerCase().includes(q)
+      );
+    }
     const cmp = sortOrder === 'newest'
       ? (a: typeof notes[0], b: typeof notes[0]) => b.createdAt.localeCompare(a.createdAt)
       : (a: typeof notes[0], b: typeof notes[0]) => a.createdAt.localeCompare(b.createdAt);
     const pinned = list.filter((n) => n.pinned).sort(cmp);
     const unpinned = list.filter((n) => !n.pinned).sort(cmp);
     return [...pinned, ...unpinned];
-  }, [notes, activeFolder, activeTag, sortOrder]);
+  }, [notes, activeFolder, activeTag, sortOrder, searchQuery]);
 
   const folderNoteCounts = useMemo(
     () => Object.fromEntries(folders.map(f => [f.id, notes.filter(n => n.folderId === f.id).length])),
@@ -269,6 +277,25 @@ export default function Notes() {
 
       {/* Sticky filter section: folder bar + tag chips */}
       {view !== 'folders' && <div className="sticky top-14 z-30 bg-surface-container-low shadow-sm" style={{ top: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
+
+        {/* Search bar */}
+        <div className="px-4 pt-2 pb-1">
+          <div className="flex items-center gap-2 bg-surface-container rounded-xl px-3 h-9 border border-outline-variant/20">
+            <span className="material-symbols-outlined text-[16px] text-outline shrink-0">search</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search notes..."
+              className="flex-1 bg-transparent font-inter text-sm text-on-surface placeholder:text-outline outline-none"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="shrink-0">
+                <span className="material-symbols-outlined text-[16px] text-outline">close</span>
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Folder bar — DnD sortable */}
         <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar items-center border-b border-outline-variant/25">
@@ -426,29 +453,100 @@ export default function Notes() {
             <p className="font-manrope font-semibold text-on-surface mb-1">No notes yet</p>
             <p className="font-work-sans text-sm text-on-surface-variant">Tap + to create your first note</p>
           </div>
-        ) : view === 'list' ? (
-          <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card">
-            {filtered.map((note) => (
-              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
-            ))}
-          </div>
-        ) : view === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {filtered.map((note) => (
-              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />
-            ))}
-          </div>
-        ) : (
-          <div className="masonry-grid" style={{ columnCount: 1 }}>
-            <style>{`
-              @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
-              @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
-            `}</style>
-            {filtered.map((note) => (
-              <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" />
-            ))}
-          </div>
-        )}
+        ) : (() => {
+          const pinnedNotes   = filtered.filter((n) => n.pinned);
+          const unpinnedNotes = filtered.filter((n) => !n.pinned);
+          const hasBoth = pinnedNotes.length > 0 && unpinnedNotes.length > 0;
+
+          const SectionHeader = ({ icon, label }: { icon: string; label: string }) => (
+            <div className="flex items-center gap-2 mb-2 mt-1">
+              <span className="material-symbols-outlined text-[13px] text-amber-500">{icon}</span>
+              <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">{label}</p>
+              <div className="flex-1 h-px bg-amber-200/60 dark:bg-amber-700/30" />
+            </div>
+          );
+          const NotesHeader = () => (
+            <div className="flex items-center gap-2 mb-2 mt-3">
+              <span className="material-symbols-outlined text-[13px] text-outline">notes</span>
+              <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notes</p>
+              <div className="flex-1 h-px bg-outline-variant/30" />
+            </div>
+          );
+
+          if (view === 'list') return (
+            <>
+              {pinnedNotes.length > 0 && (
+                <>
+                  {hasBoth && <SectionHeader icon="push_pin" label="Pinned" />}
+                  <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card">
+                    {pinnedNotes.map((note) => (
+                      <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
+                    ))}
+                  </div>
+                </>
+              )}
+              {hasBoth && <NotesHeader />}
+              {unpinnedNotes.length > 0 && (
+                <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card">
+                  {unpinnedNotes.map((note) => (
+                    <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+
+          if (view === 'grid') return (
+            <>
+              {pinnedNotes.length > 0 && (
+                <>
+                  {hasBoth && <SectionHeader icon="push_pin" label="Pinned" />}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {pinnedNotes.map((note) => (
+                      <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />
+                    ))}
+                  </div>
+                </>
+              )}
+              {hasBoth && <NotesHeader />}
+              {unpinnedNotes.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {unpinnedNotes.map((note) => (
+                    <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+
+          // masonry
+          return (
+            <>
+              {pinnedNotes.length > 0 && (
+                <>
+                  {hasBoth && <SectionHeader icon="push_pin" label="Pinned" />}
+                  <div className="masonry-grid" style={{ columnCount: 1 }}>
+                    <style>{`
+                      @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
+                      @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
+                    `}</style>
+                    {pinnedNotes.map((note) => (
+                      <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" />
+                    ))}
+                  </div>
+                </>
+              )}
+              {hasBoth && <NotesHeader />}
+              {unpinnedNotes.length > 0 && (
+                <div className="masonry-grid" style={{ columnCount: 1 }}>
+                  {unpinnedNotes.map((note) => (
+                    <NoteCard key={note.id} note={note} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </main>
 
       {/* FAB */}

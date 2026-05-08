@@ -18,12 +18,19 @@ async function ensurePermission(): Promise<boolean> {
   return after === 'granted';
 }
 
+const OFFSET_SLOTS: Array<{ key: '2h' | '1h' | '30min'; ms: number; label: string }> = [
+  { key: '2h',    ms: 2 * 60 * 60 * 1000, label: 'in 2 hours'     },
+  { key: '1h',    ms:     60 * 60 * 1000, label: 'in 1 hour'      },
+  { key: '30min', ms:         30 * 60 * 1000, label: 'in 30 minutes' },
+];
+
 interface NotifTask {
   id: string;
   title: string;
   dueDate: string | null;
   startTime?: string;
   deadlineTime?: string;
+  notificationOffsets?: ('2h' | '1h' | '30min')[];
 }
 
 function buildNotifications(task: NotifTask) {
@@ -32,29 +39,52 @@ function buildNotifications(task: NotifTask) {
   const now = Date.now();
   const items: { id: number; title: string; body: string; at: Date }[] = [];
 
-  function push(time: string, titlePrefix: string, suffixes: [string, number, string][]) {
-    const [h, min] = time.split(':').map(Number);
+  const activeOffsets: Set<'2h' | '1h' | '30min'> = new Set(
+    task.notificationOffsets?.length ? task.notificationOffsets : ['1h', '30min'],
+  );
+
+  // Day-before reminder at 8 PM
+  const prevEvening = new Date(y, m - 1, d - 1, 20, 0, 0);
+  if (prevEvening.getTime() > now) {
+    items.push({
+      id: notifId(task.id, 'due_eve'),
+      title: `Due tomorrow: ${task.title}`,
+      body: 'This task is due tomorrow — plan ahead.',
+      at: prevEvening,
+    });
+  }
+
+  // Morning-of reminder at 9 AM
+  const morning = new Date(y, m - 1, d, 9, 0, 0);
+  if (morning.getTime() > now) {
+    items.push({
+      id: notifId(task.id, 'due_today'),
+      title: `Due today: ${task.title}`,
+      body: 'This task is due today.',
+      at: morning,
+    });
+  }
+
+  function pushTimeReminders(timeStr: string, sfxPrefix: string, verb: string) {
+    const [h, min] = timeStr.split(':').map(Number);
     const base = new Date(y, m - 1, d, h, min, 0).getTime();
-    for (const [sfx, offsetMs, body] of suffixes) {
-      const at = new Date(base - offsetMs);
+    for (const slot of OFFSET_SLOTS) {
+      if (!activeOffsets.has(slot.key)) continue;
+      const at = new Date(base - slot.ms);
       if (at.getTime() > now) {
-        items.push({ id: notifId(task.id, sfx), title: `${titlePrefix}: ${task.title}`, body, at });
+        items.push({
+          id: notifId(task.id, sfxPrefix + slot.key),
+          title: task.title,
+          body: `${verb} ${slot.label}`,
+          at,
+        });
       }
     }
   }
 
-  if (task.startTime) {
-    push(task.startTime, 'Starting soon', [
-      ['start1h',  60 * 60 * 1000, 'Starts in 1 hour'],
-      ['start30m', 30 * 60 * 1000, 'Starts in 30 minutes'],
-    ]);
-  }
-  if (task.deadlineTime) {
-    push(task.deadlineTime, 'Deadline approaching', [
-      ['dl1h',  60 * 60 * 1000, 'Due in 1 hour'],
-      ['dl30m', 30 * 60 * 1000, 'Due in 30 minutes'],
-    ]);
-  }
+  if (task.startTime)    pushTimeReminders(task.startTime,    'start_', 'Starts');
+  if (task.deadlineTime) pushTimeReminders(task.deadlineTime, 'dl_',    'Due');
+
   return items;
 }
 
@@ -80,10 +110,14 @@ export async function cancelTaskNotifications(taskId: string): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await LocalNotifications.cancel({
     notifications: [
-      { id: notifId(taskId, 'start1h') },
-      { id: notifId(taskId, 'start30m') },
-      { id: notifId(taskId, 'dl1h') },
-      { id: notifId(taskId, 'dl30m') },
+      { id: notifId(taskId, 'due_eve') },
+      { id: notifId(taskId, 'due_today') },
+      { id: notifId(taskId, 'start_2h') },
+      { id: notifId(taskId, 'start_1h') },
+      { id: notifId(taskId, 'start_30min') },
+      { id: notifId(taskId, 'dl_2h') },
+      { id: notifId(taskId, 'dl_1h') },
+      { id: notifId(taskId, 'dl_30min') },
     ],
   });
 }

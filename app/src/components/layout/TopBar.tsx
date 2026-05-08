@@ -49,12 +49,6 @@ export default function TopBar({ title = 'Productivity', showBack = false, right
               <span className="material-symbols-outlined text-[22px]">search</span>
             </button>
             {rightSlot}
-            <div
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"
-              draggable={false}
-            >
-              <span className="text-white font-inter font-semibold text-xs select-none">B</span>
-            </div>
           </div>
         </div>
       </header>

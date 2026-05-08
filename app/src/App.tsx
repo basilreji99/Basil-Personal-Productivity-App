@@ -24,7 +24,7 @@ import Travel from './pages/hobbies/Travel';
 import { useFitnessStore } from './store/fitnessStore';
 import { useBooksStore } from './store/booksStore';
 import { useGymStore } from './store/gymStore';
-import { parseTokenFromHash, exchangeCodeForTokens } from './services/googleAuth';
+import { parseTokenFromHash, exchangeCodeForTokens, getOAuthRedirectUri } from './services/googleAuth';
 import { exchangeSpotifyCode } from './services/spotifyAuth';
 import { useHobbyStore } from './store/hobbyStore';
 import { useSyncStore } from './store/syncStore';
@@ -39,6 +39,8 @@ import { useSprintStore } from './store/sprintStore';
 import { runHCSync } from './services/hcSync';
 import WeeklyDigest from './pages/WeeklyDigest';
 import YearlyReview from './pages/YearlyReview';
+import Goals from './pages/Goals';
+import { useGoalsStore } from './store/goalsStore';
 
 function OAuthHandler() {
   const navigate = useNavigate();
@@ -77,13 +79,20 @@ function OAuthHandler() {
   }
 
   async function handleGoogleCode(code: string) {
-    const verifier = sessionStorage.getItem('google_pkce_verifier');
-    sessionStorage.removeItem('google_pkce_verifier');
-    if (!verifier) return;
+    const verifier = localStorage.getItem('google_pkce_verifier');
+    localStorage.removeItem('google_pkce_verifier');
+    if (!verifier) {
+      navigate('/calendar');
+      return;
+    }
     const { clientId, clientSecret } = useSyncStore.getState();
-    const redirectUri = `${window.location.origin}/`;
+    const redirectUri = getOAuthRedirectUri();
     const result = await exchangeCodeForTokens(code, verifier, clientId, clientSecret, redirectUri);
-    if (result) handleToken(result.accessToken, result.expiry, result.refreshToken);
+    if (result) {
+      handleToken(result.accessToken, result.expiry, result.refreshToken);
+    } else {
+      navigate('/calendar');
+    }
   }
 
   // Initial load + OAuth callback handling
@@ -118,15 +127,17 @@ function OAuthHandler() {
       const stateListenerPromise = CapApp.addListener('appStateChange', ({ isActive }) => {
         if (!isActive) return;
         const { isTokenValid: valid, accessToken: tok } = useSyncStore.getState();
-        if (!valid()) return;
+        if (!tok) return; // no token at all — skip
         if (Date.now() - lastAppSync < 5_000) return;
         lastAppSync = Date.now();
-        syncNow();
-        fetchCalendar();
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-        fetchAllEvents(start, end, tok);
+        syncNow(); // handles silent refresh internally if token is expired
+        if (valid()) {
+          fetchCalendar();
+          const now = new Date();
+          const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+          fetchAllEvents(start, end, tok);
+        }
         // Auto HC sync in background if enough time has passed
         if (Date.now() - lastHCSync > HC_SYNC_INTERVAL) {
           lastHCSync = Date.now();
@@ -134,16 +145,18 @@ function OAuthHandler() {
         }
       });
 
-      // Normal startup sync
+      // Normal startup sync — call even if token is expired so silent refresh can run
       const { isTokenValid, accessToken } = useSyncStore.getState();
-      if (isTokenValid()) {
+      if (accessToken) {
         lastAppSync = Date.now();
         syncNow();
-        fetchCalendar();
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-        fetchAllEvents(start, end, accessToken);
+        if (isTokenValid()) {
+          fetchCalendar();
+          const now = new Date();
+          const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+          fetchAllEvents(start, end, accessToken);
+        }
       }
       // Auto HC sync on startup (silent)
       lastHCSync = Date.now();
@@ -178,15 +191,17 @@ function OAuthHandler() {
         }
         return;
       }
-      // Normal startup sync
+      // Normal startup sync — call even if token is expired so silent refresh can run
       const { isTokenValid, accessToken } = useSyncStore.getState();
-      if (isTokenValid()) {
+      if (accessToken) {
         syncNow();
-        fetchCalendar();
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-        fetchAllEvents(start, end, accessToken);
+        if (isTokenValid()) {
+          fetchCalendar();
+          const now = new Date();
+          const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+          fetchAllEvents(start, end, accessToken);
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,7 +265,7 @@ function OAuthHandler() {
     const stores = [
       useTasksStore, useNotesStore, useHabitsStore, useFinanceStore,
       useHealthStore, useHobbyStore, useFitnessStore, useBooksStore,
-      useGymStore,
+      useGymStore, useGoalsStore,
     ] as const;
     const unsubs = stores.map(store => store.subscribe(() => markLocalDirty()));
     return () => unsubs.forEach(fn => fn());
@@ -275,6 +290,7 @@ function OAuthHandler() {
     useBooksStore.persist.rehydrate();
     useSprintStore.persist.rehydrate();
     useGymStore.persist.rehydrate();
+    useGoalsStore.persist.rehydrate();
     // Allow dirty marking again after stores have settled
     setTimeout(() => setSuppressDirtyMark(false), 1000);
   }, [needsReload, clearNeedsReload]);
@@ -316,6 +332,7 @@ export default function App() {
           <Route path="/hobbies/travel" element={<Travel />} />
           <Route path="/digest" element={<WeeklyDigest />} />
           <Route path="/yearly" element={<YearlyReview />} />
+          <Route path="/goals" element={<Goals />} />
         </Route>
       </Routes>
     </HashRouter>

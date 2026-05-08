@@ -18,6 +18,7 @@ interface TimerState {
   pomodoroCount: number;
   sessions: TimerSession[];
   customDurations: Record<TimerMode, number>;
+  focusTaskId: string | null;
 
   setMode: (mode: TimerMode) => void;
   start: () => void;
@@ -27,6 +28,8 @@ interface TimerState {
   setTask: (taskId: string | null, taskTitle: string | null) => void;
   setCustomDuration: (mode: TimerMode, seconds: number) => void;
   recordSession: () => void;
+  openFocus: (taskId: string, taskTitle: string) => void;
+  closeFocus: () => void;
 }
 
 export const useTimerStore = create<TimerState>()(
@@ -40,6 +43,7 @@ export const useTimerStore = create<TimerState>()(
       pomodoroCount: 0,
       sessions: [],
       customDurations: { ...DURATIONS },
+      focusTaskId: null,
 
       setMode: (mode) =>
         set({ mode, timeLeft: get().customDurations[mode], isRunning: false }),
@@ -77,6 +81,11 @@ export const useTimerStore = create<TimerState>()(
 
       setTask: (taskId, taskTitle) =>
         set({ currentTaskId: taskId, currentTaskTitle: taskTitle }),
+
+      openFocus: (taskId, taskTitle) =>
+        set({ focusTaskId: taskId, currentTaskId: taskId, currentTaskTitle: taskTitle }),
+
+      closeFocus: () => set({ focusTaskId: null }),
 
       setCustomDuration: (mode, seconds) =>
         set((s) => ({

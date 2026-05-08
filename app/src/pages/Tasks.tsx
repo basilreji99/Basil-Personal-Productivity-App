@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
-  useSensor, useSensors, type DragEndEvent,
+  useSensor, useSensors, useDraggable, useDroppable, DragOverlay,
+  type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, verticalListSortingStrategy,
@@ -519,13 +520,27 @@ function SortableEpicSection(props: React.ComponentProps<typeof EpicSection>) {
 
 // ─── Board card ───────────────────────────────────────────────────────────────
 
-function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit: (t: Task) => void }) {
-  const { moveTask, columns } = useTasksStore();
+function findEpicAncestor(task: Task, allTasks: Task[]): Task | null {
+  if (task.issueType === 'epic') return null;
+  let current = allTasks.find((t) => t.id === task.parentId);
+  while (current) {
+    if (current.issueType === 'epic') return current;
+    if (!current.parentId) return null;
+    current = allTasks.find((t) => t.id === current!.parentId);
+  }
+  return null;
+}
+
+function BoardCard({ task, tasks, onEdit, inSprint = false }: { task: Task; tasks: Task[]; onEdit: (t: Task) => void; inSprint?: boolean }) {
+  const { moveTask, columns, updateTask } = useTasksStore();
   const { sprints } = useSprintStore();
   const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
   const pri = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.none;
   const parent = task.parentId ? tasks.find((t) => t.id === task.parentId) : null;
   const sprint = task.sprintId ? sprints.find((s) => s.id === task.sprintId) : null;
+  const epicAncestor = findEpicAncestor(task, tasks);
+  // Story is the immediate parent when it's a story type
+  const storyParent = parent?.issueType === 'story' ? parent : null;
 
   const nonBacklogCols = [...columns].sort((a, b) => a.order - b.order).filter((c) => c.id !== 'backlog');
   const colIdx = nonBacklogCols.findIndex((c) => c.id === task.status);
@@ -534,12 +549,27 @@ function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit:
 
   return (
     <div className="bg-surface-container-lowest rounded-xl p-3 shadow-card border border-outline-variant/10">
-      {parent && (
-        <p className="font-inter text-[10px] text-outline mb-1 truncate">
-          <span className={`font-bold ${ISSUE_CONFIG[parent.issueType].color}`}>{parent.issueType.toUpperCase()}</span>
-          {' '}{parent.title}
-        </p>
+      {/* Epic + Story breadcrumb */}
+      {(epicAncestor || (parent && parent.issueType !== 'epic')) && (
+        <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+          {epicAncestor && (
+            <span className="inline-flex items-center gap-0.5 font-inter text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-1.5 py-0.5 rounded-md max-w-[100px] truncate">
+              <span className="material-symbols-outlined text-[10px]">bolt</span>
+              <span className="truncate">{epicAncestor.title}</span>
+            </span>
+          )}
+          {storyParent && (
+            <span className="inline-flex items-center gap-0.5 font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-md max-w-[100px] truncate">
+              <span className="material-symbols-outlined text-[10px]">bookmark</span>
+              <span className="truncate">{storyParent.title}</span>
+            </span>
+          )}
+          {parent && parent.issueType !== 'epic' && parent.issueType !== 'story' && (
+            <span className="font-inter text-[10px] text-outline truncate max-w-[120px]">{parent.title}</span>
+          )}
+        </div>
       )}
+
       <div className="flex items-start gap-2">
         <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${cfg.bg} ${cfg.color}`}>
           {cfg.label.slice(0, 3).toUpperCase()}
@@ -548,6 +578,7 @@ function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit:
           {task.title}
         </p>
       </div>
+
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         {task.priority !== 'none' && (
           <span className={`font-inter text-[10px] font-semibold ${pri.color}`}>{pri.label}</span>
@@ -557,12 +588,23 @@ function BoardCard({ task, tasks, onEdit }: { task: Task; tasks: Task[]; onEdit:
             {task.storyPoints}pt
           </span>
         )}
-        {sprint && (
+        {/* Sprint badge — only shown in board view (not sprint view, where it's implicit) */}
+        {sprint && !inSprint && (
           <span className="font-inter text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full truncate max-w-[80px]" title={sprint.name}>
             ⚡ {sprint.name}
           </span>
         )}
         <div className="flex-1" />
+        {/* Remove from sprint button (only in sprint view) */}
+        {inSprint && task.sprintId && (
+          <button
+            onClick={() => updateTask(task.id, { sprintId: null, status: 'backlog' })}
+            className="font-inter text-[10px] text-outline hover:text-error px-1.5 py-0.5 rounded-full transition-colors"
+            title="Remove from sprint"
+          >
+            ✕
+          </button>
+        )}
         {prevCol && (
           <button
             onClick={() => moveTask(task.id, prevCol.id)}
@@ -786,11 +828,158 @@ function CompleteSprintModal({ open, sprint, incompleteTasks, nextSprint, onClos
   );
 }
 
+// ─── SprintHistoryCard ───────────────────────────────────────────────────────
+
+function SprintHistoryCard({
+  sprint, tasks, doneTasks, pct, onEdit, onDelete,
+}: {
+  sprint: Sprint;
+  tasks: Task[];
+  doneTasks: Task[];
+  pct: number;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="bg-surface-container-lowest rounded-2xl overflow-hidden border border-outline-variant/20">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container/60 transition-colors"
+      >
+        <span className="material-symbols-outlined text-[18px] text-tertiary shrink-0">history</span>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="font-inter font-semibold text-sm text-on-surface truncate">{sprint.name}</p>
+          <p className="font-inter text-xs text-outline">{sprint.startDate} → {sprint.endDate}</p>
+        </div>
+        <span className="font-inter text-[10px] font-bold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full shrink-0">
+          {doneTasks.length}/{tasks.length} · {pct}%
+        </span>
+        <span className={`material-symbols-outlined text-[18px] text-outline transition-transform ${expanded ? 'rotate-180' : ''}`}>expand_more</span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-outline-variant/20">
+          <div className="px-4 py-2">
+            <div className="h-1.5 bg-tertiary/10 rounded-full overflow-hidden">
+              <div className="h-full bg-tertiary rounded-full" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+          {doneTasks.length > 0 && (
+            <div className="px-4 pb-2 space-y-1">
+              {doneTasks.map((t) => {
+                const cfg = ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task;
+                return (
+                  <div key={t.id} className="flex items-center gap-2 py-1">
+                    <span className="material-symbols-outlined text-[14px] text-tertiary icon-fill">check_circle</span>
+                    <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+                      {cfg.label.slice(0, 3).toUpperCase()}
+                    </span>
+                    <span className="font-inter text-xs text-on-surface truncate flex-1">{t.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {tasks.filter((t) => t.status !== 'done').length > 0 && (
+            <div className="px-4 pb-2 space-y-1 opacity-50">
+              {tasks.filter((t) => t.status !== 'done').map((t) => {
+                const cfg = ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task;
+                return (
+                  <div key={t.id} className="flex items-center gap-2 py-1">
+                    <span className="material-symbols-outlined text-[14px] text-outline">radio_button_unchecked</span>
+                    <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+                      {cfg.label.slice(0, 3).toUpperCase()}
+                    </span>
+                    <span className="font-inter text-xs text-on-surface-variant truncate flex-1">{t.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {tasks.length === 0 && (
+            <p className="font-inter text-xs text-outline text-center py-3">No tasks in this sprint</p>
+          )}
+          <div className="flex gap-2 px-4 pb-3 pt-1 border-t border-outline-variant/10">
+            <button onClick={onEdit} className="flex items-center gap-1 text-outline hover:text-primary font-inter text-xs">
+              <span className="material-symbols-outlined text-[14px]">edit</span>
+              Edit
+            </button>
+            <button onClick={onDelete} className="flex items-center gap-1 text-outline hover:text-error font-inter text-xs ml-auto">
+              <span className="material-symbols-outlined text-[14px]">delete</span>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Draggable board card ─────────────────────────────────────────────────────
+
+function DraggableBoardCard({ task, tasks: allTasks, onEdit }: { task: Task; tasks: Task[]; onEdit: (t: Task) => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
+  return (
+    <div ref={setNodeRef} style={{ opacity: isDragging ? 0.35 : 1 }} {...attributes} {...listeners} className="touch-none cursor-grab active:cursor-grabbing">
+      <BoardCard task={task} tasks={allTasks} onEdit={onEdit} />
+    </div>
+  );
+}
+
+// ─── Droppable column body ────────────────────────────────────────────────────
+
+function DroppableColumnBody({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`min-h-[60px] space-y-2 rounded-xl transition-colors ${isOver ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`}>
+      {children}
+    </div>
+  );
+}
+
+// ─── Move-task picker ─────────────────────────────────────────────────────────
+
+function MoveTaskPicker({ open, onClose, tasks, title, onPick }: {
+  open: boolean;
+  onClose: () => void;
+  tasks: Task[];
+  title: string;
+  onPick: (task: Task) => void;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm">
+      <div className="max-h-[60vh] overflow-y-auto divide-y divide-outline-variant/10">
+        {tasks.length === 0 ? (
+          <p className="text-center py-10 font-inter text-sm text-outline">No tasks available to move</p>
+        ) : (
+          tasks.map((t) => {
+            const cfg = ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task;
+            return (
+              <button
+                key={t.id}
+                onClick={() => { onPick(t); onClose(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container text-left transition-colors"
+              >
+                <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+                  {cfg.label.slice(0, 3).toUpperCase()}
+                </span>
+                <span className="flex-1 font-inter text-sm text-on-surface truncate">{t.title}</span>
+                <span className="material-symbols-outlined text-[16px] text-outline">arrow_forward</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main Tasks page ──────────────────────────────────────────────────────────
 
 export default function Tasks() {
   const { tasks, columns, addTask, updateTask, reorderItems } = useTasksStore();
-  const { sprints, activeSprint, deleteSprint } = useSprintStore();
+  const { sprints, activeSprint, deleteSprint, updateSprint } = useSprintStore();
   const pinnedTags = useTagStore((s) => s.pinned);
   const tagUsage = useTagStore((s) => s.usage);
   const filterTags = useMemo(() => {
@@ -798,7 +987,8 @@ export default function Tasks() {
     return Object.entries(tagUsage).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [pinnedTags, tagUsage]);
 
-  const [view, setView] = useState<'backlog' | 'board' | 'sprint' | 'timeline'>('backlog');
+  const [view, setView] = useState<'backlog' | 'board' | 'sprint' | 'timeline'>('board');
+  const [searchQuery, setSearchQuery] = useState('');
   const [timelineDateFilter, setTimelineDateFilter] = useState<'week' | 'month' | 'all'>('month');
   const [activeTag, setActiveTag] = useState('All');
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -815,12 +1005,21 @@ export default function Tasks() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['done']));
   const [dumpInput, setDumpInput] = useState('');
   const [dumpExpanded, setDumpExpanded] = useState(true);
-  const [showSprintTaskPicker, setShowSprintTaskPicker] = useState(false);
   const [completeSprintOpen, setCompleteSprintOpen] = useState(false);
+  const [defaultSprintId, setDefaultSprintId] = useState<string | null>(null);
+  const [draggingId, setDraggingId]       = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen]       = useState(false);
+  const [pickerSource, setPickerSource]   = useState<string>('todo');
+  const [pickerTarget, setPickerTarget]   = useState<string>('in_progress');
 
   const epicSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  );
+
+  const boardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   const filteredTasks = useMemo(() => {
@@ -851,10 +1050,7 @@ export default function Tasks() {
     () => filteredTasks.filter((t) => !t.parentId && t.issueType !== 'epic' && t.status !== 'backlog').sort((a, b) => a.order - b.order),
     [filteredTasks],
   );
-  const boardItems = useMemo(
-    () => filteredTasks.filter((t) => t.issueType !== 'epic').sort((a, b) => a.order - b.order),
-    [filteredTasks],
-  );
+
 
   // Timeline: all tasks with due dates (uses tag + priority filters, own date filter)
   const timelineTasks = useMemo(() => {
@@ -897,16 +1093,26 @@ export default function Tasks() {
 
   // Sprint data
   const currentSprint = activeSprint();
+
+  // Board view: only tasks in the active sprint (non-epic)
+  const boardSprintItems = useMemo(
+    () => currentSprint
+      ? tasks.filter((t) => t.sprintId === currentSprint.id && t.issueType !== 'epic').sort((a, b) => a.order - b.order)
+      : [],
+    [tasks, currentSprint],
+  );
+
+  const pickerTasks = useMemo(() => {
+    if (!currentSprint) return [];
+    return tasks.filter((t) => t.sprintId === currentSprint.id && t.status === pickerSource);
+  }, [tasks, currentSprint, pickerSource]);
+
   const sprintTasks = useMemo(
     () => (currentSprint ? tasks.filter((t) => t.sprintId === currentSprint.id) : []),
     [tasks, currentSprint],
   );
   const sprintDone = sprintTasks.filter((t) => t.status === 'done').length;
   const sprintPct = sprintTasks.length > 0 ? Math.round((sprintDone / sprintTasks.length) * 100) : 0;
-  const unassignedTasks = useMemo(
-    () => tasks.filter((t) => !t.sprintId && t.status !== 'done'),
-    [tasks],
-  );
   const incompleteSprintTasks = useMemo(
     () => (currentSprint ? sprintTasks.filter((t) => t.status !== 'done') : []),
     [currentSprint, sprintTasks],
@@ -916,17 +1122,24 @@ export default function Tasks() {
     [sprints],
   );
 
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return tasks.filter((t) => t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q));
+  }, [tasks, searchQuery]);
+
   const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
   const boardColumns = sortedColumns.filter((c) => c.id !== 'backlog');
 
   // ── Open helpers ──────────────────────────────────────────────────────────
 
-  const openNew = (status = 'backlog', pid: string | null = null, issueType: IssueType = 'task') => {
+  const openNew = (status = 'backlog', pid: string | null = null, issueType: IssueType = 'task', sprintId: string | null = null) => {
     setEditTask(null);
     setDefaultStatus(status);
     setDefaultParentId(pid);
     setDefaultIssueType(issueType);
     setScopeEpicId(null);
+    setDefaultSprintId(sprintId);
     setTaskModalOpen(true);
   };
 
@@ -992,6 +1205,21 @@ export default function Tasks() {
     reorderItems(arrayMove(epics, oldIdx, newIdx).map((e) => e.id));
   }
 
+  function handleBoardDragStart({ active }: DragStartEvent) {
+    setDraggingId(active.id as string);
+  }
+
+  function handleBoardDragEnd({ active, over }: DragEndEvent) {
+    setDraggingId(null);
+    if (!over) return;
+    const task = tasks.find((t) => t.id === active.id);
+    if (!task) return;
+    const targetColId = over.id as string;
+    if (boardColumns.some((c) => c.id === targetColId) && task.status !== targetColId) {
+      updateTask(task.id, { status: targetColId });
+    }
+  }
+
   return (
     <div className="bg-background min-h-screen flex flex-col">
       <TopBar title="Tasks" />
@@ -1012,7 +1240,7 @@ export default function Tasks() {
                   view === v ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
-                {v === 'sprint' && currentSprint ? '⚡' : v === 'timeline' ? '📅' : v.charAt(0).toUpperCase() + v.slice(1)}
+                {v === 'timeline' ? '📅 Timeline' : v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             ))}
           </div>
@@ -1032,6 +1260,42 @@ export default function Tasks() {
               <span className="material-symbols-outlined text-[14px]">add</span>
               Task
             </button>
+          </div>
+        </div>
+
+        {/* Active sprint compact card — visible across all views */}
+        {currentSprint && (
+          <div className="mx-4 mb-1 flex items-center gap-2.5 bg-primary/5 border border-primary/15 rounded-xl px-3 py-2">
+            <span className="material-symbols-outlined text-[15px] text-primary shrink-0">sprint</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-inter text-xs font-bold text-primary truncate">{currentSprint.name}</p>
+              <p className="font-inter text-[10px] text-outline">{currentSprint.startDate} → {currentSprint.endDate}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-20 h-1.5 bg-primary/15 rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${sprintPct}%` }} />
+              </div>
+              <span className="font-inter text-[10px] font-bold text-primary">{sprintPct}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Search bar */}
+        <div className="px-4 pb-1">
+          <div className="flex items-center gap-2 bg-surface-container rounded-xl px-3 h-8 border border-outline-variant/20">
+            <span className="material-symbols-outlined text-[14px] text-outline shrink-0">search</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search tasks..."
+              className="flex-1 bg-transparent font-inter text-xs text-on-surface placeholder:text-outline outline-none"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="shrink-0">
+                <span className="material-symbols-outlined text-[14px] text-outline">close</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1130,8 +1394,33 @@ export default function Tasks() {
 
       <main className="flex-1 max-w-screen-xl mx-auto w-full px-4 py-4 space-y-3">
 
+        {/* ── SEARCH RESULTS ───────────────────────────────────────────────── */}
+        {searchQuery.trim() ? (
+          <div className="space-y-1">
+            <p className="font-inter text-xs text-outline px-1 mb-2">{searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"</p>
+            {searchResults.length === 0 ? (
+              <div className="text-center py-12">
+                <span className="material-symbols-outlined text-[40px] text-outline block mb-2">search_off</span>
+                <p className="font-inter text-sm text-on-surface-variant">No tasks match your search</p>
+              </div>
+            ) : searchResults.map((task) => {
+              const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
+              return (
+                <button key={task.id} onClick={() => openEdit(task)}
+                  className="w-full flex items-center gap-3 bg-surface-container-lowest rounded-xl px-4 py-3 text-left hover:bg-surface-container active:scale-[0.99] transition-all shadow-sm">
+                  <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+                    {cfg.label.slice(0, 3).toUpperCase()}
+                  </span>
+                  <span className="flex-1 font-inter text-sm text-on-surface truncate">{task.title}</span>
+                  <span className="font-inter text-[10px] text-outline shrink-0 capitalize">{task.status.replace('-', ' ')}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         {/* ── BACKLOG VIEW ─────────────────────────────────────────────────── */}
-        {view === 'backlog' && (
+        {!searchQuery.trim() && view === 'backlog' && (
           <>
             {/* Brain Dump */}
             <div className="bg-surface-container-low rounded-2xl overflow-hidden">
@@ -1158,23 +1447,31 @@ export default function Tasks() {
                       className="flex-1 bg-transparent border-none outline-none font-work-sans text-sm text-on-surface placeholder:text-outline/50"
                     />
                   </div>
-                  {backlogItems.map((task) => (
-                    <div key={task.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-surface-container group">
-                      <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).color}`}>
-                        {(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
-                      </span>
-                      <span className="flex-1 font-work-sans text-sm text-on-surface cursor-pointer truncate" onClick={() => openEdit(task)}>
-                        {task.title}
-                      </span>
-                      <DueBadge dueDate={task.dueDate} />
-                      <button
-                        onClick={() => updateTask(task.id, { status: 'todo' })}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded font-inter text-[10px] font-semibold shrink-0"
-                      >
-                        Plan <span className="material-symbols-outlined text-[11px]">arrow_forward</span>
-                      </button>
-                    </div>
-                  ))}
+                  {backlogItems.map((task) => {
+                    const taskSprint = task.sprintId ? sprints.find((s) => s.id === task.sprintId) : null;
+                    return (
+                      <div key={task.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-surface-container group">
+                        <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).color}`}>
+                          {(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
+                        </span>
+                        <span className="flex-1 font-work-sans text-sm text-on-surface cursor-pointer truncate" onClick={() => openEdit(task)}>
+                          {task.title}
+                        </span>
+                        <DueBadge dueDate={task.dueDate} />
+                        {taskSprint && (
+                          <span className="font-inter text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full truncate max-w-[80px] shrink-0" title={taskSprint.name}>
+                            ⚡ {taskSprint.name}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => updateTask(task.id, { status: 'todo' })}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded font-inter text-[10px] font-semibold shrink-0"
+                        >
+                          Plan <span className="material-symbols-outlined text-[11px]">arrow_forward</span>
+                        </button>
+                      </div>
+                    );
+                  })}
                   {backlogItems.length === 0 && (
                     <p className="text-center font-inter text-xs text-outline py-2">Dump anything here — sort later</p>
                   )}
@@ -1242,9 +1539,9 @@ export default function Tasks() {
         )}
 
         {/* ── SPRINT VIEW ──────────────────────────────────────────────────── */}
-        {view === 'sprint' && (
+        {!searchQuery.trim() && view === 'sprint' && (
           <div className="space-y-4">
-            {/* Sprint header */}
+            {/* Current sprint header */}
             {currentSprint ? (
               <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-2xl p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -1267,8 +1564,6 @@ export default function Tasks() {
                     <span className="material-symbols-outlined text-[18px]">edit</span>
                   </button>
                 </div>
-
-                {/* Progress bar */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-inter text-xs text-on-surface-variant">{sprintDone}/{sprintTasks.length} tasks done</span>
@@ -1278,8 +1573,6 @@ export default function Tasks() {
                     <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${sprintPct}%` }} />
                   </div>
                 </div>
-
-                {/* Complete sprint button */}
                 <button
                   onClick={() => setCompleteSprintOpen(true)}
                   className="w-full py-2 rounded-xl border border-primary/30 text-primary font-inter text-sm font-semibold hover:bg-primary/10 transition-colors"
@@ -1292,30 +1585,27 @@ export default function Tasks() {
                 <span className="material-symbols-outlined text-[40px] text-outline block">sprint</span>
                 <p className="font-inter font-semibold text-on-surface">No active sprint</p>
                 <p className="font-work-sans text-sm text-on-surface-variant">Create a sprint and mark it active to start tracking work.</p>
-                <button
-                  onClick={() => { setEditSprint(null); setSprintModalOpen(true); }}
-                  className="px-4 py-2 bg-primary text-on-primary rounded-xl font-inter text-sm font-semibold"
-                >
-                  + New Sprint
-                </button>
               </div>
             )}
 
-            {/* All sprints list */}
-            {sprints.filter((sp) => sp.id !== currentSprint?.id).length > 0 && (
+            {/* Planned sprints */}
+            {sprints.filter((sp) => sp.status === 'planned').length > 0 && (
               <div className="bg-surface-container-low rounded-2xl overflow-hidden">
-                <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-4 py-3 border-b border-outline-variant/20">Other Sprints</p>
-                {sprints.filter((sp) => sp.id !== currentSprint?.id).map((sp) => (
+                <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-4 py-3 border-b border-outline-variant/20">Planned</p>
+                {sprints.filter((sp) => sp.status === 'planned').map((sp) => (
                   <div key={sp.id} className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant/10 last:border-0">
                     <div className="flex-1 min-w-0">
                       <p className="font-inter font-medium text-sm text-on-surface truncate">{sp.name}</p>
                       <p className="font-inter text-xs text-outline">{sp.startDate} → {sp.endDate}</p>
                     </div>
-                    <span className={`font-inter text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${
-                      sp.status === 'completed' ? 'bg-tertiary/10 text-tertiary' : 'bg-surface-container text-outline'
-                    }`}>
-                      {sp.status}
-                    </span>
+                    {!currentSprint && (
+                      <button
+                        onClick={() => updateSprint(sp.id, { status: 'active' })}
+                        className="px-2.5 py-1 rounded-lg bg-primary text-on-primary font-inter text-xs font-semibold shrink-0"
+                      >
+                        Activate
+                      </button>
+                    )}
                     <button onClick={() => { setEditSprint(sp); setSprintModalOpen(true); }} className="p-1 text-outline hover:text-primary">
                       <span className="material-symbols-outlined text-[16px]">edit</span>
                     </button>
@@ -1327,146 +1617,169 @@ export default function Tasks() {
               </div>
             )}
 
-            {/* Sprint kanban board */}
+            {/* Sprint history */}
+            {sprints.filter((sp) => sp.status === 'completed').length > 0 && (
+              <div className="space-y-3">
+                <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-1">History</p>
+                {sprints
+                  .filter((sp) => sp.status === 'completed')
+                  .sort((a, b) => b.endDate.localeCompare(a.endDate))
+                  .map((sp) => {
+                    const spTasks = tasks.filter((t) => t.sprintId === sp.id);
+                    const spDone = spTasks.filter((t) => t.status === 'done');
+                    const spPct = spTasks.length > 0 ? Math.round((spDone.length / spTasks.length) * 100) : 0;
+                    return (
+                      <SprintHistoryCard
+                        key={sp.id}
+                        sprint={sp}
+                        tasks={spTasks}
+                        doneTasks={spDone}
+                        pct={spPct}
+                        onEdit={() => { setEditSprint(sp); setSprintModalOpen(true); }}
+                        onDelete={() => deleteSprint(sp.id)}
+                      />
+                    );
+                  })}
+              </div>
+            )}
+
+            {/* New / Plan next sprint button */}
+            <button
+              onClick={() => { setEditSprint(null); setSprintModalOpen(true); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-surface-container text-on-surface-variant font-inter text-sm"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              {currentSprint ? 'Plan next sprint' : 'New Sprint'}
+            </button>
+          </div>
+        )}
+
+        {/* ── BOARD VIEW ───────────────────────────────────────────────────── */}
+        {!searchQuery.trim() && view === 'board' && (
+          <div className="space-y-4">
+            {/* No-sprint warning */}
+            {!currentSprint && (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-outline-variant/30 bg-surface-container-low">
+                <span className="material-symbols-outlined text-[20px] text-outline">sprint</span>
+                <div className="flex-1">
+                  <p className="font-inter text-sm font-semibold text-on-surface">No active sprint</p>
+                  <p className="font-inter text-xs text-outline mt-0.5">Go to Sprint tab → Activate a sprint to see tasks here.</p>
+                </div>
+                <button onClick={() => setView('sprint')} className="shrink-0 px-3 py-1.5 rounded-xl bg-primary text-on-primary font-inter text-xs font-semibold">
+                  Go
+                </button>
+              </div>
+            )}
+
+            {/* Sprint banner */}
             {currentSprint && (
+              <div className="bg-gradient-to-r from-primary/8 to-secondary/8 border border-primary/20 rounded-2xl px-4 py-3 flex items-center gap-3">
+                <span className="material-symbols-outlined text-[18px] text-primary shrink-0">sprint</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-inter font-bold text-sm text-on-surface truncate">{currentSprint.name}</p>
+                  <p className="font-inter text-[10px] text-outline">{currentSprint.startDate} → {currentSprint.endDate}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-16 h-1.5 bg-primary/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${sprintPct}%` }} />
+                  </div>
+                  <span className="font-inter text-xs font-bold text-primary">{sprintPct}%</span>
+                </div>
+                <button
+                  onClick={() => setCompleteSprintOpen(true)}
+                  className="shrink-0 px-3 py-1.5 rounded-xl border border-primary/30 text-primary font-inter text-xs font-semibold hover:bg-primary/10 transition-colors"
+                >
+                  Complete →
+                </button>
+              </div>
+            )}
+
+            {/* Kanban board */}
+            <DndContext
+              sensors={boardSensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleBoardDragStart}
+              onDragEnd={handleBoardDragEnd}
+            >
               <div className="lg:grid lg:grid-cols-4 lg:gap-3 lg:items-start space-y-3 lg:space-y-0">
                 {boardColumns.map((col) => {
-                  const colTasks = sprintTasks.filter((t) => t.status === col.id);
+                  const colTasks = boardSprintItems.filter((t) => t.status === col.id);
+                  const collapsed = collapsedSections.has(col.id);
                   const isDone = col.id === 'done';
-                  const collapsed = collapsedSections.has(`sprint-${col.id}`);
+
                   return (
                     <div key={col.id} className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
                       <button
-                        onClick={() => toggleSection(`sprint-${col.id}`)}
+                        onClick={() => toggleSection(col.id)}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container/60 transition-colors"
                       >
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
                         <span className="font-inter font-semibold text-sm text-on-surface flex-1 text-left uppercase tracking-wide">{col.name}</span>
                         <span className="font-inter text-xs text-outline font-bold bg-surface-container px-2 py-0.5 rounded-full">{colTasks.length}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openNew(col.id); }}
-                          className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">add</span>
-                        </button>
+                        {/* + button: todo creates new task, in_progress/review picks from prev column */}
+                        {col.id === 'todo' && currentSprint && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openNew('todo', null, 'task', currentSprint.id); }}
+                            className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">add</span>
+                          </button>
+                        )}
+                        {col.id === 'in_progress' && currentSprint && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPickerSource('todo'); setPickerTarget('in_progress'); setPickerOpen(true); }}
+                            className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+                          </button>
+                        )}
+                        {col.id === 'review' && currentSprint && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPickerSource('in_progress'); setPickerTarget('review'); setPickerOpen(true); }}
+                            className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+                          </button>
+                        )}
                         <span className={`material-symbols-outlined text-[18px] text-outline transition-transform ${collapsed ? '' : 'rotate-180'}`}>expand_more</span>
                       </button>
+
                       {!collapsed && (
-                        <div className={`px-4 pb-4 space-y-2 border-t border-outline-variant/20 pt-2 ${isDone ? 'opacity-70' : ''}`}>
-                          {colTasks.map((task) => (
-                            <BoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} />
-                          ))}
-                          {colTasks.length === 0 && (
-                            <p className="font-inter text-xs text-outline text-center py-3">Empty</p>
-                          )}
+                        <div className={`px-3 pb-3 border-t border-outline-variant/20 pt-2 ${isDone ? 'opacity-70' : ''}`}>
+                          <DroppableColumnBody id={col.id}>
+                            {colTasks.map((task) => (
+                              <DraggableBoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} />
+                            ))}
+                            {colTasks.length === 0 && !currentSprint && (
+                              <p className="text-center font-inter text-xs text-outline py-4">No tasks</p>
+                            )}
+                            {colTasks.length === 0 && currentSprint && (
+                              <div className="flex items-center justify-center py-4 rounded-xl border-2 border-dashed border-outline-variant/30 text-outline">
+                                <span className="font-inter text-xs">Drop here</span>
+                              </div>
+                            )}
+                          </DroppableColumnBody>
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
-            )}
 
-            {/* Add tasks from backlog */}
-            {currentSprint && (
-              <div>
-                <button
-                  onClick={() => setShowSprintTaskPicker((v) => !v)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-outline-variant text-on-surface-variant font-inter text-sm"
-                >
-                  <span className="material-symbols-outlined text-[18px]">add</span>
-                  {showSprintTaskPicker ? 'Hide' : 'Add tasks to sprint'}
-                </button>
-                {showSprintTaskPicker && unassignedTasks.length > 0 && (
-                  <div className="mt-2 bg-surface-container rounded-2xl overflow-hidden">
-                    {unassignedTasks.slice(0, 20).map((t) => (
-                      <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-outline-variant/10 last:border-0">
-                        <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).color}`}>
-                          {(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
-                        </span>
-                        <span className="flex-1 font-work-sans text-sm text-on-surface truncate">{t.title}</span>
-                        <button
-                          onClick={() => updateTask(t.id, {
-                            sprintId: currentSprint.id,
-                            status: t.status === 'backlog' ? 'todo' : t.status,
-                          })}
-                          className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary rounded-lg font-inter text-xs font-semibold"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ))}
-                    {unassignedTasks.length === 0 && (
-                      <p className="text-center font-inter text-xs text-outline py-4">All tasks are in a sprint</p>
-                    )}
+              {/* Drag overlay */}
+              <DragOverlay>
+                {draggingId ? (
+                  <div className="opacity-90 shadow-xl rotate-1">
+                    <BoardCard task={tasks.find((t) => t.id === draggingId)!} tasks={tasks} onEdit={() => {}} />
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Create sprint button (when there is an active sprint) */}
-            {currentSprint && (
-              <button
-                onClick={() => { setEditSprint(null); setSprintModalOpen(true); }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-surface-container text-on-surface-variant font-inter text-sm"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Plan next sprint
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* ── BOARD VIEW ───────────────────────────────────────────────────── */}
-        {view === 'board' && (
-          <div className="lg:grid lg:grid-cols-4 lg:gap-3 lg:items-start space-y-3 lg:space-y-0">
-            {boardColumns.map((col) => {
-              const colTasks = boardItems.filter((t) => t.status === col.id);
-              const isDone = col.id === 'done';
-              const collapsed = collapsedSections.has(col.id);
-
-              return (
-                <div key={col.id} className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-                  <button
-                    onClick={() => toggleSection(col.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container/60 transition-colors"
-                  >
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
-                    <span className="font-inter font-semibold text-sm text-on-surface flex-1 text-left uppercase tracking-wide">{col.name}</span>
-                    <span className="font-inter text-xs text-outline font-bold bg-surface-container px-2 py-0.5 rounded-full">{colTasks.length}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openNew(col.id); }}
-                      className="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">add</span>
-                    </button>
-                    <span className={`material-symbols-outlined text-[18px] text-outline transition-transform ${collapsed ? '' : 'rotate-180'}`}>expand_more</span>
-                  </button>
-
-                  {!collapsed && (
-                    <div className={`px-4 pb-4 space-y-2 border-t border-outline-variant/20 pt-2 ${isDone ? 'opacity-70' : ''}`}>
-                      {colTasks.map((task) => (
-                        <BoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} />
-                      ))}
-                      {colTasks.length === 0 && (
-                        <button
-                          onClick={() => openNew(col.id)}
-                          className="w-full border-2 border-dashed border-outline-variant/40 rounded-xl p-3 flex items-center justify-center gap-2 hover:border-primary/30 hover:bg-primary/5 transition-all"
-                        >
-                          <span className="material-symbols-outlined text-[16px] text-outline">add</span>
-                          <span className="font-inter text-xs text-outline">Add task</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           </div>
         )}
 
         {/* ── TIMELINE VIEW ────────────────────────────────────────────────── */}
-        {view === 'timeline' && (
+        {!searchQuery.trim() && view === 'timeline' && (
           <div className="space-y-5">
             {timelineGroups.length === 0 ? (
               <div className="text-center py-14">
@@ -1550,12 +1863,13 @@ export default function Tasks() {
 
       <TaskModal
         open={taskModalOpen}
-        onClose={() => { setTaskModalOpen(false); setEditTask(null); setScopeEpicId(null); }}
+        onClose={() => { setTaskModalOpen(false); setEditTask(null); setScopeEpicId(null); setDefaultSprintId(null); }}
         task={editTask}
         defaultStatus={defaultStatus}
         parentId={defaultParentId}
         defaultIssueType={defaultIssueType}
         scopeEpicId={scopeEpicId}
+        defaultSprintId={defaultSprintId}
       />
       <TagManager open={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
       <SprintModal
@@ -1569,6 +1883,13 @@ export default function Tasks() {
         incompleteTasks={incompleteSprintTasks}
         nextSprint={nextSprint}
         onClose={() => setCompleteSprintOpen(false)}
+      />
+      <MoveTaskPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        tasks={pickerTasks}
+        title={pickerTarget === 'in_progress' ? 'Move to In Progress' : 'Move to Review'}
+        onPick={(t) => updateTask(t.id, { status: pickerTarget })}
       />
     </div>
   );

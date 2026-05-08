@@ -554,7 +554,7 @@ export default function Fitness() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Fitness & Sports" showBack />
+      <TopBar title="Sports" showBack />
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-4">
 
@@ -636,7 +636,7 @@ export default function Fitness() {
               className="w-full flex items-center gap-3 bg-surface-container-lowest rounded-xl px-4 py-3 shadow-sm hover:bg-surface-container transition-colors text-left">
               <span className="material-symbols-outlined text-primary text-[22px]">exercise</span>
               <div className="flex-1">
-                <p className="font-inter font-semibold text-sm text-on-surface">Workout Tracker</p>
+                <p className="font-inter font-semibold text-sm text-on-surface">Gym</p>
                 <p className="font-inter text-[11px] text-outline">Log exercises, sets & reps</p>
               </div>
               <span className="material-symbols-outlined text-outline text-[18px]">chevron_right</span>

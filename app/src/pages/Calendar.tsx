@@ -9,14 +9,24 @@ import { useTasksStore } from '../store/tasksStore';
 import { useNavigate } from 'react-router-dom';
 import { buildCalendarAuthUrl, openAuthUrl } from '../services/googleAuth';
 
+const ACCOUNT_PALETTE = ['#6366f1', '#ef4444', '#f59e0b', '#10b981', '#ec4899', '#06b6d4'];
+const LOCAL_EVENT_COLOR = '#8b5cf6';
+
 function EventRow({
-  ev, localEvents, onNavigate, onEdit,
+  ev, localEvents, onNavigate, onEdit, accountColorMap,
 }: {
   ev: UnifiedEvent;
   localEvents: LocalEvent[];
   onNavigate: (taskId: string) => void;
   onEdit: (local: LocalEvent) => void;
+  accountColorMap: Record<string, string>;
 }) {
+  const dotColor = ev.accountEmail
+    ? (accountColorMap[ev.accountEmail] ?? ev.color)
+    : ev.id.startsWith('task-') || ev.id.startsWith('fit-')
+      ? ev.color
+      : LOCAL_EVENT_COLOR;
+
   return (
     <button
       onClick={() => {
@@ -29,7 +39,7 @@ function EventRow({
       }}
       className="w-full bg-surface-container rounded-xl px-4 py-3 flex items-start gap-3 text-left active:bg-surface-container-high"
     >
-      <div className="w-1 self-stretch rounded-full shrink-0 min-h-[20px]" style={{ backgroundColor: ev.color }} />
+      <div className="w-1 self-stretch rounded-full shrink-0 min-h-[20px]" style={{ backgroundColor: dotColor }} />
       <div className="flex-1 min-w-0">
         <p className="font-inter font-medium text-sm text-on-surface">{ev.title}</p>
         {ev.location && (
@@ -39,7 +49,7 @@ function EventRow({
           </p>
         )}
         {ev.accountEmail && (
-          <p className="font-inter text-[10px] text-outline mt-0.5 truncate">{ev.accountEmail}</p>
+          <p className="font-inter text-[10px] mt-0.5 truncate font-medium" style={{ color: dotColor }}>{ev.accountEmail}</p>
         )}
       </div>
       <div className="shrink-0 text-right">
@@ -137,6 +147,15 @@ export default function Calendar() {
   const primaryToken = isTokenValid() ? accessToken : null;
   const connected = !!primaryToken;
   const hasAnyAccount = connected || accounts.length > 0;
+
+  // Assign a stable color per Google account email
+  const accountColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    let idx = 0;
+    if (profile?.email) { map[profile.email] = ACCOUNT_PALETTE[idx++ % ACCOUNT_PALETTE.length]; }
+    accounts.forEach(acc => { if (!map[acc.email]) map[acc.email] = ACCOUNT_PALETTE[idx++ % ACCOUNT_PALETTE.length]; });
+    return map;
+  }, [profile?.email, accounts]);
 
   // Fetch events for current month view
   useEffect(() => {
@@ -383,12 +402,11 @@ export default function Calendar() {
                       <li>Create a project → enable <strong className="text-on-surface">Google Calendar API</strong> + <strong className="text-on-surface">Drive API</strong></li>
                       <li>APIs &amp; Services → OAuth consent screen → External, add yourself as test user</li>
                       <li>Add scopes: <code className="bg-surface-container px-1 rounded">drive.appdata</code>, <code className="bg-surface-container px-1 rounded">calendar.readonly</code>, <code className="bg-surface-container px-1 rounded">spreadsheets</code></li>
-                      <li>Credentials → Create → OAuth 2.0 Client ID → <strong className="text-on-surface">Web application</strong></li>
-                      <li>Authorised JS origins: <code className="bg-surface-container px-1 rounded">http://localhost</code></li>
-                      <li>Authorised redirect URIs: <code className="bg-surface-container px-1 rounded">http://localhost/</code></li>
+                      <li>Credentials → Create → OAuth 2.0 Client ID → <strong className="text-on-surface">Desktop app</strong></li>
+                      <li>No redirect URI config needed — Google auto-allows custom schemes for Desktop apps</li>
                       <li>Copy both the <strong className="text-on-surface">Client ID</strong> and <strong className="text-on-surface">Client Secret</strong> and paste above</li>
                     </ol>
-                    <p className="text-primary font-medium mt-1">The Client Secret enables persistent login — you only sign in once.</p>
+                    <p className="text-primary font-medium mt-1">Use Desktop app type — it's more reliable on Android than Web application.</p>
                   </div>
                 )}
               </div>
@@ -467,6 +485,34 @@ export default function Calendar() {
               onToday={handleToday}
             />
 
+            {/* Color legend */}
+            {(Object.keys(accountColorMap).length > 0 || true) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
+                {Object.entries(accountColorMap).map(([email, color]) => (
+                  <div key={email} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span className="font-inter text-[10px] text-on-surface-variant truncate max-w-[120px]">{email}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: LOCAL_EVENT_COLOR }} />
+                  <span className="font-inter text-[10px] text-on-surface-variant">Local events</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-orange-500" />
+                  <span className="font-inter text-[10px] text-on-surface-variant">Gym</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
+                  <span className="font-inter text-[10px] text-on-surface-variant">Sports</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-gray-400" />
+                  <span className="font-inter text-[10px] text-on-surface-variant">Tasks</span>
+                </div>
+              </div>
+            )}
+
             {/* Selected day events */}
             <section>
               <div className="flex items-center justify-between mb-2 px-1">
@@ -499,6 +545,7 @@ export default function Calendar() {
                       localEvents={localEvents}
                       onNavigate={(id) => navigate(`/tasks/${id}`)}
                       onEdit={(local) => setEventModal({ open: true, event: local })}
+                      accountColorMap={accountColorMap}
                     />
                   ))}
                 </div>
@@ -547,6 +594,7 @@ export default function Calendar() {
                             localEvents={localEvents}
                             onNavigate={(id) => navigate(`/tasks/${id}`)}
                             onEdit={(local) => setEventModal({ open: true, event: local })}
+                            accountColorMap={accountColorMap}
                           />
                         ))}
                       </div>

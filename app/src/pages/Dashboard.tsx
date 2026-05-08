@@ -5,7 +5,6 @@ import { format, parseISO } from 'date-fns';
 import TopBar from '../components/layout/TopBar';
 import FocusTimer from '../components/timer/FocusTimer';
 import { useTasksStore } from '../store/tasksStore';
-import { useHabitsStore } from '../store/habitsStore';
 import { useSyncStore } from '../store/syncStore';
 import { useCalendarStore } from '../store/calendarStore';
 import { getTodayString, isOverdue, isDueSoon, formatDisplayDate } from '../utils/dateUtils';
@@ -27,12 +26,17 @@ const PRIORITY_COLOR: Record<string, string> = {
   none: 'text-outline',
 };
 
+const PRIORITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
+
 const CALENDAR_COLORS: Record<string, string> = {
   '1': 'bg-blue-400', '2': 'bg-teal-400', '3': 'bg-indigo-400',
   '4': 'bg-red-400', '5': 'bg-yellow-400', '6': 'bg-orange-400',
   '7': 'bg-blue-600', '8': 'bg-gray-400', '9': 'bg-blue-300',
   '10': 'bg-green-400', '11': 'bg-red-600',
 };
+
+const MINI_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MINI_DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
 function EventTime({ event }: { event: CalendarEvent }) {
   if (event.isAllDay) return <span className="font-inter text-[10px] text-outline">All day</span>;
@@ -44,14 +48,81 @@ function EventTime({ event }: { event: CalendarEvent }) {
   }
 }
 
+function MiniDatePicker({ value, onChange, onClose }: {
+  value: string; onChange: (v: string) => void; onClose: () => void;
+}) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [viewYear, setViewYear] = useState(() => parseInt(value.slice(0, 4)));
+  const [viewMonth, setViewMonth] = useState(() => parseInt(value.slice(5, 7)) - 1);
+
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const prevMonth = () => viewMonth === 0 ? (setViewYear(y => y - 1), setViewMonth(11)) : setViewMonth(m => m - 1);
+  const nextMonth = () => viewMonth === 11 ? (setViewYear(y => y + 1), setViewMonth(0)) : setViewMonth(m => m + 1);
+
+  const pick = (day: number) => {
+    const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    onChange(ds);
+    onClose();
+  };
+
+  return (
+    <div className="absolute top-7 left-0 z-50 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-modal overflow-hidden w-72">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-outline-variant/15">
+        <button type="button" onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container transition-colors">
+          <span className="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_left</span>
+        </button>
+        <span className="font-inter font-semibold text-sm text-on-surface">{MINI_MONTHS[viewMonth]} {viewYear}</span>
+        <button type="button" onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container transition-colors">
+          <span className="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_right</span>
+        </button>
+      </div>
+      <div className="p-2">
+        <div className="grid grid-cols-7 mb-1">
+          {MINI_DAYS.map(d => (
+            <span key={d} className="text-center font-inter text-[10px] text-outline font-semibold py-1">{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-0.5">
+          {Array.from({ length: firstDow }, (_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+            const ds = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const sel = ds === value;
+            const tdy = ds === todayStr;
+            return (
+              <button key={day} type="button" onClick={() => pick(day)}
+                className={`h-8 w-full rounded-lg font-inter text-sm font-medium transition-colors ${
+                  sel ? 'bg-primary text-on-primary' :
+                  tdy ? 'bg-primary/15 text-primary font-semibold' :
+                  'hover:bg-surface-container text-on-surface'
+                }`}>
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {value !== todayStr && (
+        <div className="px-3 pb-3 pt-1">
+          <button type="button" onClick={() => { onChange(todayStr); onClose(); }}
+            className="w-full py-1.5 rounded-lg bg-primary/10 text-primary font-inter text-xs font-semibold hover:bg-primary/20 transition-colors">
+            Back to Today
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [showTimer, setShowTimer] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => getTodayString());
 
   const allTasks = useTasksStore((s) => s.tasks);
   const updateTask = useTasksStore((s) => s.updateTask);
-  const allHabits = useHabitsStore((s) => s.habits);
-  const isHabitCompleted = useHabitsStore((s) => s.isCompleted);
   const { calendarEvents, isTokenValid, syncStatus, syncNow, accessToken } = useSyncStore();
   const calendarAccounts = useCalendarStore((s) => s.accounts);
 
@@ -59,7 +130,6 @@ export default function Dashboard() {
     () => allTasks.filter((t) => !t.parentId).sort((a, b) => a.order - b.order),
     [allTasks],
   );
-  const habits = useMemo(() => allHabits.filter((h) => !h.archivedAt), [allHabits]);
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -68,28 +138,29 @@ export default function Dashboard() {
   }, []);
 
   const today = getTodayString();
+  const isToday = selectedDate === today;
 
-  const PRIORITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
-
-  const todayDeadlineTasks = useMemo(
-    () =>
-      tasks
+  const selectedDayTasks = useMemo(() => {
+    if (isToday) {
+      return tasks
         .filter((t) => t.status !== 'done' && t.dueDate && (isOverdue(t.dueDate) || isDueSoon(t.dueDate, 0)))
         .sort((a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0))
-        .slice(0, 5),
-    [tasks],
-  );
+        .slice(0, 5);
+    }
+    return tasks
+      .filter((t) => t.dueDate === selectedDate)
+      .sort((a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0));
+  }, [tasks, selectedDate, isToday]);
 
-  // Tasks in the next 30 days with high/critical priority, or overdue tasks not shown in Today
   const comingUpTasks = useMemo(() => {
-    const todayIds = new Set(todayDeadlineTasks.map((t) => t.id));
+    const shownIds = new Set(selectedDayTasks.map((t) => t.id));
     const in30Days = new Date();
     in30Days.setDate(in30Days.getDate() + 30);
     const in30Str = in30Days.toISOString().slice(0, 10);
 
     return tasks
       .filter((t) => {
-        if (t.status === 'done' || !t.dueDate || todayIds.has(t.id)) return false;
+        if (t.status === 'done' || !t.dueDate || shownIds.has(t.id)) return false;
         const overdue = isOverdue(t.dueDate);
         const upcoming = t.dueDate > today && t.dueDate <= in30Str;
         const important = t.priority === 'critical' || t.priority === 'high';
@@ -102,7 +173,7 @@ export default function Dashboard() {
         return (a.dueDate ?? '').localeCompare(b.dueDate ?? '');
       })
       .slice(0, 7);
-  }, [tasks, todayDeadlineTasks, today]);
+  }, [tasks, selectedDayTasks, today]);
 
   const focusTasks = useMemo(
     () =>
@@ -120,7 +191,8 @@ export default function Dashboard() {
   const tokenValid = isTokenValid();
   const hasDriveToken = !!accessToken;
   const connected = tokenValid || calendarAccounts.length > 0;
-  const driveExpired = hasDriveToken && !tokenValid;
+  // Only show "session expired" after syncNow has actually tried and failed (not just on token age check)
+  const driveExpired = hasDriveToken && !tokenValid && syncStatus === 'error';
 
   const { mode, setMode, resolvedDark } = useThemeStore();
   const isDark = resolvedDark();
@@ -128,7 +200,9 @@ export default function Dashboard() {
     setMode(mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light');
   }
 
-  const todayIsEmpty = calendarEvents.length === 0 && todayDeadlineTasks.length === 0;
+  const sectionEmpty = isToday
+    ? calendarEvents.length === 0 && selectedDayTasks.length === 0
+    : selectedDayTasks.length === 0;
 
   return (
     <div className="bg-background min-h-screen">
@@ -166,6 +240,11 @@ export default function Dashboard() {
           </div>
         }
       />
+
+      {/* Backdrop to close date picker when clicking outside */}
+      {showPicker && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowPicker(false)} />
+      )}
 
       <main className="max-w-screen-xl mx-auto px-4 pt-5 pb-4 space-y-6">
 
@@ -206,22 +285,46 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Today — unified events + deadlines */}
+        {/* Today / Selected Date — unified events + tasks */}
         <section className="space-y-2">
           <div className="flex justify-between items-center">
-            <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary">today</span>
-              Today
-            </h3>
-            {!todayIsEmpty && (
-              <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
-                All tasks
+            <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2 relative">
+              <button
+                onClick={() => setShowPicker(v => !v)}
+                className="flex items-center justify-center text-primary hover:opacity-70 transition-opacity"
+                title="Pick a date"
+              >
+                <span className="material-symbols-outlined text-[18px]">today</span>
               </button>
-            )}
+              {isToday ? 'Today' : format(new Date(selectedDate + 'T12:00:00'), 'MMM d, yyyy')}
+              {showPicker && (
+                <MiniDatePicker
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  onClose={() => setShowPicker(false)}
+                />
+              )}
+            </h3>
+            <div className="flex items-center gap-3">
+              {!isToday && (
+                <button
+                  onClick={() => { setSelectedDate(today); setShowPicker(false); }}
+                  className="font-inter text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[13px]">today</span>
+                  Today
+                </button>
+              )}
+              {isToday && !sectionEmpty && (
+                <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
+                  All tasks
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Calendar events */}
-          {connected && calendarEvents.map((ev) => (
+          {/* Calendar events (today only) */}
+          {isToday && connected && calendarEvents.map((ev) => (
             <div key={ev.id} className="bg-surface-container-lowest rounded-xl px-4 py-3 flex items-center gap-3 shadow-card">
               <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${CALENDAR_COLORS[ev.colorId ?? ''] ?? 'bg-primary'}`} />
               <div className="flex-1 min-w-0">
@@ -234,11 +337,13 @@ export default function Dashboard() {
             </div>
           ))}
 
-          {/* Tasks due today / overdue */}
-          {todayDeadlineTasks.map((task) => (
+          {/* Tasks for selected day */}
+          {selectedDayTasks.map((task) => (
             <div
               key={task.id}
-              className="bg-surface-container-lowest rounded-xl p-4 shadow-card border-l-4 border-l-error cursor-pointer hover:shadow-card-hover transition-shadow"
+              className={`bg-surface-container-lowest rounded-xl p-4 shadow-card cursor-pointer hover:shadow-card-hover transition-shadow ${
+                isToday ? 'border-l-4 border-l-error' : task.status === 'done' ? 'opacity-70' : 'border-l-4 border-l-outline-variant'
+              }`}
               onClick={() => navigate(`/tasks/${task.id}`)}
             >
               <div className="flex items-center gap-3">
@@ -259,8 +364,10 @@ export default function Dashboard() {
                   <p className={`font-inter font-medium text-sm text-on-surface truncate ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
                     {task.title}
                   </p>
-                  <p className={`font-inter text-xs ${isOverdue(task.dueDate) ? 'text-error font-semibold' : 'text-on-surface-variant'}`}>
-                    {isOverdue(task.dueDate) ? '⚠ Overdue' : 'Due today'}
+                  <p className={`font-inter text-xs ${isToday && isOverdue(task.dueDate) ? 'text-error font-semibold' : 'text-on-surface-variant'}`}>
+                    {isToday
+                      ? (isOverdue(task.dueDate) ? '⚠ Overdue' : 'Due today')
+                      : (task.status === 'done' ? 'Completed' : 'Due this day')}
                   </p>
                 </div>
                 <span className={`material-symbols-outlined text-[18px] ${PRIORITY_COLOR[task.priority]}`}>
@@ -271,19 +378,27 @@ export default function Dashboard() {
           ))}
 
           {/* Empty state */}
-          {todayIsEmpty && (
+          {sectionEmpty && (
             <div className="bg-surface-container-lowest rounded-xl px-4 py-5 flex items-center gap-4 shadow-card">
-              <span className="material-symbols-outlined text-[32px] text-tertiary">check_circle</span>
+              <span className="material-symbols-outlined text-[32px] text-tertiary">
+                {isToday ? 'check_circle' : 'event_busy'}
+              </span>
               <div>
-                <p className="font-inter font-semibold text-sm text-on-surface">All clear for today!</p>
-                <p className="font-inter text-xs text-on-surface-variant">No events or deadlines due today</p>
+                <p className="font-inter font-semibold text-sm text-on-surface">
+                  {isToday ? 'All clear for today!' : 'No tasks this day'}
+                </p>
+                <p className="font-inter text-xs text-on-surface-variant">
+                  {isToday
+                    ? 'No events or deadlines due today'
+                    : `Nothing scheduled for ${format(new Date(selectedDate + 'T12:00:00'), 'MMMM d, yyyy')}`}
+                </p>
               </div>
             </div>
           )}
         </section>
 
-        {/* Coming Up — important/emergency tasks in the next 30 days + overflow overdue */}
-        {comingUpTasks.length > 0 && (
+        {/* Coming Up — today only, when today has no deadlines */}
+        {isToday && selectedDayTasks.length === 0 && comingUpTasks.length > 0 && (
           <section className="space-y-2">
             <div className="flex justify-between items-center">
               <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
@@ -347,8 +462,8 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Focus — high priority tasks with no deadline */}
-        {focusTasks.length > 0 && (
+        {/* Focus — high priority tasks with no deadline (today only) */}
+        {isToday && focusTasks.length > 0 && (
           <section className="space-y-3">
             <div className="flex justify-between items-center">
               <h3 className="font-h3 text-h3 text-on-surface flex items-center gap-2">
@@ -393,34 +508,6 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Habits Today */}
-        <section className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-h3 text-h3 text-on-surface">Today's Habits</h3>
-            <button onClick={() => navigate('/habits')} className="font-inter text-xs font-semibold text-primary hover:underline">
-              View all
-            </button>
-          </div>
-          <div className="space-y-2">
-            {habits.slice(0, 3).map((habit) => {
-              const done = isHabitCompleted(habit.id, today);
-              return (
-                <div key={habit.id} className="bg-surface-container-lowest rounded-xl px-4 py-3 flex items-center gap-3 shadow-card">
-                  <span className={`material-symbols-outlined text-[22px] ${done ? 'text-tertiary icon-fill' : 'text-on-surface-variant'}`}>
-                    {habit.icon}
-                  </span>
-                  <p className={`font-inter font-medium text-sm flex-1 ${done ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
-                    {habit.name}
-                  </p>
-                  <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${done ? 'border-tertiary bg-tertiary' : 'border-outline-variant'}`}>
-                    {done && <span className="material-symbols-outlined text-[11px] text-on-tertiary icon-fill">check</span>}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
         {/* Quick Access */}
         <section className="space-y-3 pb-4">
           <h3 className="font-h3 text-h3 text-on-surface">Quick Access</h3>
@@ -457,8 +544,8 @@ export default function Dashboard() {
                 <span className="material-symbols-outlined text-[22px] text-amber-600">summarize</span>
               </div>
               <div>
-                <p className="font-manrope font-bold text-sm text-on-surface">Weekly Digest</p>
-                <p className="font-inter text-[10px] text-on-surface-variant">This week at a glance</p>
+                <p className="font-manrope font-bold text-sm text-on-surface">Digest</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Weekly, monthly & yearly</p>
               </div>
             </button>
             <button
@@ -471,6 +558,18 @@ export default function Dashboard() {
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Yearly Review</p>
                 <p className="font-inter text-[10px] text-on-surface-variant">Full year stats</p>
+              </div>
+            </button>
+            <button
+              onClick={() => navigate('/goals')}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-primary/5 border border-primary/10 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-primary">target</span>
+              </div>
+              <div>
+                <p className="font-manrope font-bold text-sm text-on-surface">Goals & OKRs</p>
+                <p className="font-inter text-[10px] text-on-surface-variant">Quarterly objectives</p>
               </div>
             </button>
           </div>

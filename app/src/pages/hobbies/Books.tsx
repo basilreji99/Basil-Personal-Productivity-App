@@ -402,6 +402,7 @@ type Tab = 'reviews' | 'reading-list';
 export default function Books() {
   const { reviews, readingList } = useBooksStore();
   const [tab, setTab] = useState<Tab>('reviews');
+  const [searchQuery, setSearchQuery] = useState('');
   const [reviewOpen, setReviewOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [editReview, setEditReview] = useState<BookReview | null>(null);
@@ -417,9 +418,19 @@ export default function Books() {
 
   const filteredReviews = useMemo(() => {
     let list = filterGenre === 'All' ? reviews : reviews.filter((r) => r.genres.includes(filterGenre));
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((r) => r.title.toLowerCase().includes(q) || r.author.toLowerCase().includes(q));
+    }
     if (sortRating) list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [reviews, filterGenre, sortRating]);
+  }, [reviews, filterGenre, sortRating, searchQuery]);
+
+  const filteredReadingList = useMemo(() => {
+    if (!searchQuery.trim()) return readingList;
+    const q = searchQuery.toLowerCase();
+    return readingList.filter((r) => r.title.toLowerCase().includes(q) || r.author.toLowerCase().includes(q));
+  }, [readingList, searchQuery]);
 
   const avgRating = reviews.length > 0
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
@@ -448,6 +459,23 @@ export default function Books() {
             </div>
           </div>
         )}
+
+        {/* Search bar */}
+        <div className="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 h-10 border border-outline-variant/20">
+          <span className="material-symbols-outlined text-[16px] text-outline shrink-0">search</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by title or author..."
+            className="flex-1 bg-transparent font-inter text-sm text-on-surface placeholder:text-outline outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="shrink-0">
+              <span className="material-symbols-outlined text-[16px] text-outline">close</span>
+            </button>
+          )}
+        </div>
 
         {/* Tabs */}
         <div className="flex bg-surface-container rounded-xl p-1 gap-1">
@@ -492,9 +520,9 @@ export default function Books() {
             </div>
           )
         ) : (
-          readingList.length > 0 ? (
+          filteredReadingList.length > 0 ? (
             <div className="space-y-2">
-              {readingList.map((w) => (
+              {filteredReadingList.map((w) => (
                 <button key={w.id} onClick={() => { setEditListItem(w); setListOpen(true); }}
                   className="w-full flex items-center gap-3 bg-surface-container-lowest rounded-xl px-4 py-3 shadow-sm text-left hover:bg-surface-container/50 active:scale-[0.99] transition-all">
                   <span className="material-symbols-outlined text-[20px] text-on-surface-variant">bookmark</span>

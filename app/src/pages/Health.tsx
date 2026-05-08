@@ -390,91 +390,45 @@ function LogModal({ open, onClose, measurement }: {
   );
 }
 
-// ─── Profile Modal ────────────────────────────────────────────────────────────
-
-function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { profile, updateProfile } = useHealthStore();
-  const [height, setHeight]           = useState(profile.height?.toString() ?? '');
-  const [bfMin, setBfMin]             = useState(profile.targetBodyFatMin.toString());
-  const [bfMax, setBfMax]             = useState(profile.targetBodyFatMax.toString());
-  const [targetWeight, setTargetWeight] = useState(profile.targetWeight?.toString() ?? '');
-  const [targetMuscle, setTargetMuscle] = useState(profile.targetMuscleMass?.toString() ?? '');
-
-  useMemo(() => {
-    if (open) {
-      setHeight(profile.height?.toString() ?? '');
-      setBfMin(profile.targetBodyFatMin.toString());
-      setBfMax(profile.targetBodyFatMax.toString());
-      setTargetWeight(profile.targetWeight?.toString() ?? '');
-      setTargetMuscle(profile.targetMuscleMass?.toString() ?? '');
-    }
-  }, [open]);
-
-  const handleSave = () => {
-    updateProfile({
-      height: parseFloat(height) || 0,
-      targetBodyFatMin: parseFloat(bfMin) || 10,
-      targetBodyFatMax: parseFloat(bfMax) || 15,
-      targetWeight: targetWeight ? parseFloat(targetWeight) : undefined,
-      targetMuscleMass: targetMuscle ? parseFloat(targetMuscle) : undefined,
-    });
-    onClose();
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Health Profile" size="sm">
-      <div className="p-5 space-y-4">
-        <div className="space-y-1">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Height (cm)</label>
-          <input type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="e.g. 173"
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-        </div>
-        <div className="space-y-1">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Target Body Fat Range (%)</label>
-          <div className="flex items-center gap-2">
-            <input type="number" step="0.5" value={bfMin} onChange={e => setBfMin(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-            <span className="font-inter text-sm text-outline shrink-0">to</span>
-            <input type="number" step="0.5" value={bfMax} onChange={e => setBfMax(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Target Weight (kg)</label>
-            <input type="number" step="0.5" value={targetWeight} onChange={e => setTargetWeight(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-          </div>
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Target Muscle (kg)</label>
-            <input type="number" step="0.5" value={targetMuscle} onChange={e => setTargetMuscle(e.target.value)} placeholder="optional"
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm outline-none focus:border-primary/50" />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter text-sm hover:bg-surface-container">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-primary text-on-primary font-inter font-medium text-sm">Save</button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+type HealthTab = 'body' | 'sync' | 'profile';
 
 export default function Health() {
   const navigate = useNavigate();
-  const { measurements, profile, getLatest, calcBMI } = useHealthStore();
-  const { gymSessions, sportSessions } = useFitnessStore();
+  const { measurements, profile, getLatest, calcBMI, updateProfile } = useHealthStore();
+  const { sportSessions } = useFitnessStore();
   const hcLastSync = localStorage.getItem('basil-hc-last-sync');
+
+  const [tab, setTab]                 = useState<HealthTab>('body');
   const [logOpen, setLogOpen]         = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [editEntry, setEditEntry]     = useState<BodyMeasurement | null>(null);
   const [metricModal, setMetricModal] = useState<MetricConfig | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [hcSyncing, setHcSyncing]     = useState(false);
   const [hcStatus, setHcStatus]       = useState<string | null>(null);
   const [hcNeedsSetup, setHcNeedsSetup] = useState(false);
+  const [sheetsSyncing, setSheetsSyncing] = useState(false);
+  const [sheetsStatus, setSheetsStatus]   = useState<string | null>(null);
+
+  // Profile inline editing state
+  const [height, setHeight]           = useState(profile.height?.toString() ?? '');
+  const [bfMin, setBfMin]             = useState(profile.targetBodyFatMin.toString());
+  const [bfMax, setBfMax]             = useState(profile.targetBodyFatMax.toString());
+  const [targetWeight, setTargetWeight] = useState(profile.targetWeight?.toString() ?? '');
+  const [targetMuscle, setTargetMuscle] = useState(profile.targetMuscleMass?.toString() ?? '');
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  // Sync profile form when tab switches to profile
+  useEffect(() => {
+    if (tab !== 'profile') return;
+    setHeight(profile.height?.toString() ?? '');
+    setBfMin(profile.targetBodyFatMin.toString());
+    setBfMax(profile.targetBodyFatMax.toString());
+    setTargetWeight(profile.targetWeight?.toString() ?? '');
+    setTargetMuscle(profile.targetMuscleMass?.toString() ?? '');
+    setProfileSaved(false);
+  }, [tab]);
 
   const isNative = Capacitor.isNativePlatform();
 
@@ -496,7 +450,6 @@ export default function Health() {
     setHcStatus(null);
     setHcNeedsSetup(false);
     try {
-      // Check availability first
       const avail = await HealthConnect.checkAvailability().catch(() => null);
       if (!avail || avail.status === 'unavailable') {
         setHcStatus('Health Connect not available on this device');
@@ -507,7 +460,6 @@ export default function Health() {
         return;
       }
 
-      // Request permissions if not granted
       let perms = await HealthConnect.checkHCPermissions().catch(() => null);
       if (!perms?.granted) {
         perms = await HealthConnect.requestHCPermissions().catch(() => null);
@@ -518,14 +470,12 @@ export default function Health() {
         return;
       }
 
-      // Run the full sync (body measurements + sleep + exercise)
       const { imported, error } = await runHCSync();
       if (error && error !== 'permissions_missing') {
         setHcStatus(`Sync failed: ${error}`);
         return;
       }
 
-      // Sync to Google Sheets if token is available
       const { accessToken, isTokenValid } = useSyncStore.getState();
       if (isTokenValid() && accessToken) {
         setHcStatus(`HC synced (${imported} records) — updating Sheets…`);
@@ -548,15 +498,29 @@ export default function Health() {
     }
   }, [profile.height]);
 
-  const gymStats = useMemo(() => {
-    const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthly = gymSessions.filter(s => s.date.startsWith(monthStr)).length;
-    const typeCounts: Record<string, number> = {};
-    gymSessions.forEach(s => { typeCounts[s.type] = (typeCounts[s.type] ?? 0) + 1; });
-    const fav = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '–';
-    return { total: gymSessions.length, monthly, fav };
-  }, [gymSessions]);
+  const syncToSheets = useCallback(async () => {
+    const { accessToken, isTokenValid } = useSyncStore.getState();
+    if (!isTokenValid() || !accessToken) {
+      setSheetsStatus('Connect Google Drive first to export to Sheets');
+      return;
+    }
+    setSheetsSyncing(true);
+    setSheetsStatus(null);
+    try {
+      const result = await syncHealthToSheets(accessToken, measurements, profile.height ?? 0);
+      if (result.error) {
+        setSheetsStatus(`Export failed: ${result.error}`);
+      } else if (result.synced > 0) {
+        setSheetsStatus(`Exported ${result.synced} new rows to Google Sheets`);
+      } else {
+        setSheetsStatus('Sheets already up to date');
+      }
+    } catch (e: unknown) {
+      setSheetsStatus(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSheetsSyncing(false);
+    }
+  }, [measurements, profile.height]);
 
   const sportStats = useMemo(() => {
     const now = new Date();
@@ -586,317 +550,446 @@ export default function Health() {
     setLogOpen(true);
   }
 
+  const handleSaveProfile = () => {
+    updateProfile({
+      height: parseFloat(height) || 0,
+      targetBodyFatMin: parseFloat(bfMin) || 10,
+      targetBodyFatMax: parseFloat(bfMax) || 15,
+      targetWeight: targetWeight ? parseFloat(targetWeight) : undefined,
+      targetMuscleMass: targetMuscle ? parseFloat(targetMuscle) : undefined,
+    });
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 2000);
+  };
+
+  const TABS: { key: HealthTab; label: string; icon: string }[] = [
+    { key: 'body',    label: 'Body',    icon: 'monitor_heart' },
+    { key: 'sync',    label: 'Sync',    icon: 'sync' },
+    { key: 'profile', label: 'Profile', icon: 'person' },
+  ];
+
   return (
     <div className="bg-background min-h-screen">
-      <TopBar
-        title="Health"
-        rightSlot={
-          <button onClick={() => setProfileOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container">
-            <span className="material-symbols-outlined text-[22px]">settings</span>
-          </button>
-        }
-      />
+      <TopBar title="Health" />
+
+      {/* Tab switcher */}
+      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur-sm border-b border-outline-variant/20">
+        <div className="flex max-w-screen-xl mx-auto px-4">
+          {TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-inter font-medium transition-colors border-b-2 ${
+                tab === t.key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className={`material-symbols-outlined text-[16px] ${tab === t.key ? 'icon-fill' : ''}`}>{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-4">
 
-        {/* Hero card */}
-        {latest ? (
-          <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-4 shadow-card">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="font-inter text-xs font-semibold uppercase tracking-wider text-primary/70">Last Updated</p>
-                <p className="font-manrope font-bold text-sm text-primary">{fmt(latest.date)}</p>
-              </div>
-              <button onClick={() => openEdit(latest)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-primary/60 hover:bg-primary/10">
-                <span className="material-symbols-outlined text-[18px]">edit</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {/* Weight */}
-              {latest.weight !== undefined && (
-                <button onClick={() => setMetricModal(METRIC_CONFIGS[0])}
-                  className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="material-symbols-outlined text-[14px] text-blue-500">scale</span>
-                    <p className="font-inter text-[10px] text-blue-500 font-semibold uppercase tracking-wide">Weight</p>
+        {/* ── BODY TAB ── */}
+        {tab === 'body' && (
+          <>
+            {/* Hero card */}
+            {latest ? (
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-4 shadow-card">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-inter text-xs font-semibold uppercase tracking-wider text-primary/70">Last Updated</p>
+                    <p className="font-manrope font-bold text-sm text-primary">{fmt(latest.date)}</p>
                   </div>
-                  <p className="font-manrope font-bold text-2xl text-blue-700">{latest.weight}<span className="text-xs font-normal ml-0.5">kg</span></p>
-                  {weightChange !== null && (
-                    <p className="font-inter text-[10px] text-blue-400 mt-0.5">
-                      {parseFloat(weightChange) < 0 ? '' : '+'}{weightChange}kg total
-                    </p>
-                  )}
-                </button>
-              )}
-
-              {/* Body Fat */}
-              {latest.bodyFat !== undefined && (
-                <button onClick={() => setMetricModal(METRIC_CONFIGS[1])}
-                  className="bg-orange-50 dark:bg-orange-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="material-symbols-outlined text-[14px] text-orange-500">water_drop</span>
-                    <p className="font-inter text-[10px] text-orange-500 font-semibold uppercase tracking-wide">Body Fat</p>
-                  </div>
-                  <p className="font-manrope font-bold text-2xl text-orange-700">{latest.bodyFat}<span className="text-xs font-normal ml-0.5">%</span></p>
-                  {bfCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bfCat.color }}>{bfCat.label}</p>}
-                </button>
-              )}
-
-              {/* BMI */}
-              {bmi !== null && (
-                <button onClick={() => setMetricModal(METRIC_CONFIGS[2])}
-                  className="bg-purple-50 dark:bg-purple-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="material-symbols-outlined text-[14px] text-purple-500">person</span>
-                    <p className="font-inter text-[10px] text-purple-500 font-semibold uppercase tracking-wide">BMI</p>
-                  </div>
-                  <p className="font-manrope font-bold text-2xl text-purple-700">{bmi}</p>
-                  {bmiCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bmiCat.color }}>{bmiCat.label}</p>}
-                </button>
-              )}
-
-              {/* Muscle Mass */}
-              {latest.muscleMass !== undefined && (
-                <button onClick={() => setMetricModal(METRIC_CONFIGS[3])}
-                  className="bg-violet-50 dark:bg-violet-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="material-symbols-outlined text-[14px] text-violet-500">fitness_center</span>
-                    <p className="font-inter text-[10px] text-violet-500 font-semibold uppercase tracking-wide">Muscle</p>
-                  </div>
-                  <p className="font-manrope font-bold text-2xl text-violet-700">{latest.muscleMass}<span className="text-xs font-normal ml-0.5">kg</span></p>
-                </button>
-              )}
-
-              {/* BMR — full width */}
-              {latest.bmr !== undefined && (
-                <button onClick={() => setMetricModal(METRIC_CONFIGS[5])}
-                  className="col-span-2 bg-pink-50 dark:bg-pink-950/30 rounded-xl p-3 flex items-center gap-3 text-left hover:scale-[1.01] transition-transform active:scale-95">
-                  <span className="material-symbols-outlined text-[22px] text-pink-500">local_fire_department</span>
-                  <div className="flex-1">
-                    <p className="font-inter text-[10px] text-pink-500 font-semibold uppercase tracking-wide">BMR</p>
-                    <p className="font-manrope font-bold text-2xl text-pink-700">{latest.bmr}<span className="text-xs font-normal ml-0.5">kcal</span></p>
-                  </div>
-                  <p className="font-inter text-xs text-pink-400">Basal Metabolic Rate</p>
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="bg-surface-container-lowest rounded-2xl p-6 text-center shadow-card">
-            <span className="material-symbols-outlined text-[48px] text-outline mb-3">monitor_heart</span>
-            <p className="font-inter font-semibold text-sm text-on-surface mb-4">No measurements yet</p>
-            <button onClick={() => { setEditEntry(null); setLogOpen(true); }}
-              className="px-4 py-2 bg-primary text-on-primary rounded-xl font-inter font-medium text-sm">
-              Log First Measurement
-            </button>
-          </div>
-        )}
-
-        {/* Secondary metrics row */}
-        {latest && (
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { cfg: METRIC_CONFIGS[4], val: latest.bodyWater,   unit: '%', label: 'Water' },
-              { cfg: METRIC_CONFIGS[6], val: latest.visceralFat, unit: '',  label: 'Visceral' },
-              { cfg: METRIC_CONFIGS[7], val: latest.protein,     unit: '%', label: 'Protein' },
-            ].filter(x => x.val !== undefined).map(({ cfg, val, unit, label }) => (
-              <button key={cfg.key} onClick={() => setMetricModal(cfg)}
-                className="bg-surface-container-lowest rounded-xl p-2.5 text-center hover:scale-[1.03] transition-transform active:scale-95 shadow-sm">
-                <span className="material-symbols-outlined text-[16px] mb-1" style={{ color: cfg.color }}>{cfg.icon}</span>
-                <p className="font-manrope font-bold text-base text-on-surface leading-none">{val}</p>
-                <p className="font-inter text-[9px] text-outline mt-0.5">{unit || label}</p>
-                <p className="font-inter text-[9px] text-on-surface-variant">{unit ? label : ''}</p>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Goal progress */}
-        {latest?.bodyFat !== undefined && (
-          <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
-            <p className="font-inter font-semibold text-sm text-on-surface mb-3">
-              Target Body Fat: {profile.targetBodyFatMin}–{profile.targetBodyFatMax}%
-            </p>
-            <div className="relative h-4 bg-surface-container rounded-full overflow-hidden">
-              <div className="absolute inset-0 rounded-full opacity-30"
-                style={{ background: 'linear-gradient(to right, #3b82f6 0%, #22c55e 35%, #f59e0b 65%, #ef4444 100%)' }} />
-              <div className="absolute top-0 bottom-0 bg-green-200/50 border-l border-r border-green-400/40"
-                style={{
-                  left: `${Math.min(100, (profile.targetBodyFatMin / 35) * 100)}%`,
-                  width: `${Math.min(100, ((profile.targetBodyFatMax - profile.targetBodyFatMin) / 35) * 100)}%`,
-                }} />
-              <div className="absolute top-1 bottom-1 w-1.5 h-2.5 rounded-sm bg-white shadow-md -translate-x-1/2"
-                style={{ left: `${Math.min(100, (latest.bodyFat / 35) * 100)}%` }} />
-            </div>
-            <div className="flex justify-between mt-1">
-              <span className="font-inter text-[10px] text-outline">5%</span>
-              <span className="font-inter text-[10px] font-semibold text-on-surface">
-                {latest.bodyFat}% {latest.bodyFat <= profile.targetBodyFatMax && latest.bodyFat >= profile.targetBodyFatMin ? '✓ In range' : latest.bodyFat > profile.targetBodyFatMax ? `↓ ${(latest.bodyFat - profile.targetBodyFatMax).toFixed(1)}% to go` : '↑ Below target'}
-              </span>
-              <span className="font-inter text-[10px] text-outline">35%</span>
-            </div>
-          </div>
-        )}
-
-        {/* History */}
-        {measurements.length > 0 && (
-          <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-            <div className="px-4 py-3 border-b border-outline-variant/20 flex items-center justify-between">
-              <p className="font-inter font-semibold text-sm text-on-surface">History</p>
-              <span className="font-inter text-xs text-outline">{measurements.length} entries</span>
-            </div>
-            <div className="divide-y divide-outline-variant/10">
-              {historyItems.map(m => {
-                const entryBmi = m.weight ? calcBMI(m.weight) : null;
-                return (
-                  <button key={m.id} onClick={() => openEdit(m)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container text-left transition-colors">
-                    <div className="w-10 h-10 rounded-xl bg-surface-container flex flex-col items-center justify-center shrink-0">
-                      <span className="font-inter font-bold text-xs text-primary leading-none">
-                        {new Date(m.date + 'T12:00:00').getDate()}
-                      </span>
-                      <span className="font-inter text-[8px] text-outline uppercase">
-                        {new Date(m.date + 'T12:00:00').toLocaleString('default', { month: 'short' })}
-                      </span>
-                    </div>
-                    <div className="flex-1 flex items-center gap-4 min-w-0">
-                      {m.weight !== undefined && (
-                        <div className="text-center min-w-[36px]">
-                          <p className="font-inter font-semibold text-sm text-on-surface">{m.weight}</p>
-                          <p className="font-inter text-[9px] text-outline">kg</p>
-                        </div>
-                      )}
-                      {m.bodyFat !== undefined && (
-                        <div className="text-center min-w-[36px]">
-                          <p className="font-inter font-semibold text-sm text-on-surface">{m.bodyFat}%</p>
-                          <p className="font-inter text-[9px] text-outline">fat</p>
-                        </div>
-                      )}
-                      {entryBmi !== null && (
-                        <div className="text-center min-w-[36px]">
-                          <p className="font-inter font-semibold text-sm text-on-surface">{entryBmi}</p>
-                          <p className="font-inter text-[9px] text-outline">BMI</p>
-                        </div>
-                      )}
-                      {m.muscleMass !== undefined && (
-                        <div className="text-center min-w-[36px] hidden sm:block">
-                          <p className="font-inter font-semibold text-sm text-on-surface">{m.muscleMass}</p>
-                          <p className="font-inter text-[9px] text-outline">muscle</p>
-                        </div>
-                      )}
-                    </div>
-                    <span className="material-symbols-outlined text-[16px] text-outline shrink-0">chevron_right</span>
+                  <button onClick={() => openEdit(latest)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-primary/60 hover:bg-primary/10">
+                    <span className="material-symbols-outlined text-[18px]">edit</span>
                   </button>
-                );
-              })}
-            </div>
-            {measurements.length > 3 && (
-              <button onClick={() => setShowAllHistory(v => !v)}
-                className="w-full py-3 font-inter text-xs text-primary font-semibold hover:bg-surface-container transition-colors border-t border-outline-variant/20">
-                {showAllHistory ? 'Show less' : `Show all ${measurements.length} entries`}
-              </button>
-            )}
-          </div>
-        )}
+                </div>
 
-        {/* ── Fitness Hub ── */}
-        <div className="space-y-2">
-          <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-1">Fitness</p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => navigate('/hobbies/fitness')}
-              className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-orange-600">fitness_center</span>
+                <div className="grid grid-cols-2 gap-3">
+                  {latest.weight !== undefined && (
+                    <button onClick={() => setMetricModal(METRIC_CONFIGS[0])}
+                      className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="material-symbols-outlined text-[14px] text-blue-500">scale</span>
+                        <p className="font-inter text-[10px] text-blue-500 font-semibold uppercase tracking-wide">Weight</p>
+                      </div>
+                      <p className="font-manrope font-bold text-2xl text-blue-700">{latest.weight}<span className="text-xs font-normal ml-0.5">kg</span></p>
+                      {weightChange !== null && (
+                        <p className="font-inter text-[10px] text-blue-400 mt-0.5">
+                          {parseFloat(weightChange) < 0 ? '' : '+'}{weightChange}kg total
+                        </p>
+                      )}
+                    </button>
+                  )}
+
+                  {latest.bodyFat !== undefined && (
+                    <button onClick={() => setMetricModal(METRIC_CONFIGS[1])}
+                      className="bg-orange-50 dark:bg-orange-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="material-symbols-outlined text-[14px] text-orange-500">water_drop</span>
+                        <p className="font-inter text-[10px] text-orange-500 font-semibold uppercase tracking-wide">Body Fat</p>
+                      </div>
+                      <p className="font-manrope font-bold text-2xl text-orange-700">{latest.bodyFat}<span className="text-xs font-normal ml-0.5">%</span></p>
+                      {bfCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bfCat.color }}>{bfCat.label}</p>}
+                    </button>
+                  )}
+
+                  {bmi !== null && (
+                    <button onClick={() => setMetricModal(METRIC_CONFIGS[2])}
+                      className="bg-purple-50 dark:bg-purple-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="material-symbols-outlined text-[14px] text-purple-500">person</span>
+                        <p className="font-inter text-[10px] text-purple-500 font-semibold uppercase tracking-wide">BMI</p>
+                      </div>
+                      <p className="font-manrope font-bold text-2xl text-purple-700">{bmi}</p>
+                      {bmiCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bmiCat.color }}>{bmiCat.label}</p>}
+                    </button>
+                  )}
+
+                  {latest.muscleMass !== undefined && (
+                    <button onClick={() => setMetricModal(METRIC_CONFIGS[3])}
+                      className="bg-violet-50 dark:bg-violet-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="material-symbols-outlined text-[14px] text-violet-500">fitness_center</span>
+                        <p className="font-inter text-[10px] text-violet-500 font-semibold uppercase tracking-wide">Muscle</p>
+                      </div>
+                      <p className="font-manrope font-bold text-2xl text-violet-700">{latest.muscleMass}<span className="text-xs font-normal ml-0.5">kg</span></p>
+                    </button>
+                  )}
+
+                  {latest.bmr !== undefined && (
+                    <button onClick={() => setMetricModal(METRIC_CONFIGS[5])}
+                      className="bg-pink-50 dark:bg-pink-950/30 rounded-xl p-3 text-left hover:scale-[1.02] transition-transform active:scale-95">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="material-symbols-outlined text-[14px] text-pink-500">local_fire_department</span>
+                        <p className="font-inter text-[10px] text-pink-500 font-semibold uppercase tracking-wide">BMR</p>
+                      </div>
+                      <p className="font-manrope font-bold text-2xl text-pink-700">{latest.bmr}<span className="text-xs font-normal ml-0.5">kcal</span></p>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="font-manrope font-bold text-sm text-on-surface">Fitness & Sports</p>
-                <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">
-                  {gymStats.monthly} gym · {sportStats.monthly} sport this month
+            ) : (
+              <div className="bg-surface-container-lowest rounded-2xl p-6 text-center shadow-card">
+                <span className="material-symbols-outlined text-[48px] text-outline mb-3">monitor_heart</span>
+                <p className="font-inter font-semibold text-sm text-on-surface mb-4">No measurements yet</p>
+                <button onClick={() => { setEditEntry(null); setLogOpen(true); }}
+                  className="px-4 py-2 bg-primary text-on-primary rounded-xl font-inter font-medium text-sm">
+                  Log First Measurement
+                </button>
+              </div>
+            )}
+
+            {/* Secondary metrics row */}
+            {latest && (
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { cfg: METRIC_CONFIGS[4], val: latest.bodyWater,   unit: '%', label: 'Water' },
+                  { cfg: METRIC_CONFIGS[6], val: latest.visceralFat, unit: '',  label: 'Visceral' },
+                  { cfg: METRIC_CONFIGS[7], val: latest.protein,     unit: '%', label: 'Protein' },
+                ].filter(x => x.val !== undefined).map(({ cfg, val, unit, label }) => (
+                  <button key={cfg.key} onClick={() => setMetricModal(cfg)}
+                    className="bg-surface-container-lowest rounded-xl p-2.5 text-center hover:scale-[1.03] transition-transform active:scale-95 shadow-sm">
+                    <span className="material-symbols-outlined text-[16px] mb-1" style={{ color: cfg.color }}>{cfg.icon}</span>
+                    <p className="font-manrope font-bold text-base text-on-surface leading-none">{val}</p>
+                    <p className="font-inter text-[9px] text-outline mt-0.5">{unit || label}</p>
+                    <p className="font-inter text-[9px] text-on-surface-variant">{unit ? label : ''}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Goal progress */}
+            {latest?.bodyFat !== undefined && (
+              <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+                <p className="font-inter font-semibold text-sm text-on-surface mb-3">
+                  Target Body Fat: {profile.targetBodyFatMin}–{profile.targetBodyFatMax}%
                 </p>
+                <div className="relative h-4 bg-surface-container rounded-full overflow-hidden">
+                  <div className="absolute inset-0 rounded-full opacity-30"
+                    style={{ background: 'linear-gradient(to right, #3b82f6 0%, #22c55e 35%, #f59e0b 65%, #ef4444 100%)' }} />
+                  <div className="absolute top-0 bottom-0 bg-green-200/50 border-l border-r border-green-400/40"
+                    style={{
+                      left: `${Math.min(100, (profile.targetBodyFatMin / 35) * 100)}%`,
+                      width: `${Math.min(100, ((profile.targetBodyFatMax - profile.targetBodyFatMin) / 35) * 100)}%`,
+                    }} />
+                  <div className="absolute top-1 bottom-1 w-1.5 h-2.5 rounded-sm bg-white shadow-md -translate-x-1/2"
+                    style={{ left: `${Math.min(100, (latest.bodyFat / 35) * 100)}%` }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="font-inter text-[10px] text-outline">5%</span>
+                  <span className="font-inter text-[10px] font-semibold text-on-surface">
+                    {latest.bodyFat}% {latest.bodyFat <= profile.targetBodyFatMax && latest.bodyFat >= profile.targetBodyFatMin ? '✓ In range' : latest.bodyFat > profile.targetBodyFatMax ? `↓ ${(latest.bodyFat - profile.targetBodyFatMax).toFixed(1)}% to go` : '↑ Below target'}
+                  </span>
+                  <span className="font-inter text-[10px] text-outline">35%</span>
+                </div>
               </div>
-              <span className="font-inter text-[10px] font-semibold text-orange-600">{gymStats.total} gym · {sportStats.total} sport total</span>
-            </button>
-            <button
-              onClick={() => navigate('/hobbies/gym')}
-              className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-violet-600">exercise</span>
-              </div>
-              <div>
-                <p className="font-manrope font-bold text-sm text-on-surface">Workout Tracker</p>
-                <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">Sets, reps & weights</p>
-              </div>
-              <span className="font-inter text-[10px] font-semibold text-violet-600">Track detailed workouts</span>
-            </button>
-          </div>
-        </div>
+            )}
 
-        {/* ── Health Connect Sync ── */}
-        {isNative && (
-          <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-green-50 dark:bg-green-950/30 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[20px] text-green-600">sync</span>
+            {/* History */}
+            {measurements.length > 0 && (
+              <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
+                <div className="px-4 py-3 border-b border-outline-variant/20 flex items-center justify-between">
+                  <p className="font-inter font-semibold text-sm text-on-surface">History</p>
+                  <span className="font-inter text-xs text-outline">{measurements.length} entries</span>
+                </div>
+                <div className="divide-y divide-outline-variant/10">
+                  {historyItems.map(m => {
+                    const entryBmi = m.weight ? calcBMI(m.weight) : null;
+                    return (
+                      <button key={m.id} onClick={() => openEdit(m)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container text-left transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-surface-container flex flex-col items-center justify-center shrink-0">
+                          <span className="font-inter font-bold text-xs text-primary leading-none">
+                            {new Date(m.date + 'T12:00:00').getDate()}
+                          </span>
+                          <span className="font-inter text-[8px] text-outline uppercase">
+                            {new Date(m.date + 'T12:00:00').toLocaleString('default', { month: 'short' })}
+                          </span>
+                        </div>
+                        <div className="flex-1 flex items-center gap-4 min-w-0">
+                          {m.weight !== undefined && (
+                            <div className="text-center min-w-[36px]">
+                              <p className="font-inter font-semibold text-sm text-on-surface">{m.weight}</p>
+                              <p className="font-inter text-[9px] text-outline">kg</p>
+                            </div>
+                          )}
+                          {m.bodyFat !== undefined && (
+                            <div className="text-center min-w-[36px]">
+                              <p className="font-inter font-semibold text-sm text-on-surface">{m.bodyFat}%</p>
+                              <p className="font-inter text-[9px] text-outline">fat</p>
+                            </div>
+                          )}
+                          {entryBmi !== null && (
+                            <div className="text-center min-w-[36px]">
+                              <p className="font-inter font-semibold text-sm text-on-surface">{entryBmi}</p>
+                              <p className="font-inter text-[9px] text-outline">BMI</p>
+                            </div>
+                          )}
+                          {m.muscleMass !== undefined && (
+                            <div className="text-center min-w-[36px] hidden sm:block">
+                              <p className="font-inter font-semibold text-sm text-on-surface">{m.muscleMass}</p>
+                              <p className="font-inter text-[9px] text-outline">muscle</p>
+                            </div>
+                          )}
+                        </div>
+                        <span className="material-symbols-outlined text-[16px] text-outline shrink-0">chevron_right</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {measurements.length > 3 && (
+                  <button onClick={() => setShowAllHistory(v => !v)}
+                    className="w-full py-3 font-inter text-xs text-primary font-semibold hover:bg-surface-container transition-colors border-t border-outline-variant/20">
+                    {showAllHistory ? 'Show less' : `Show all ${measurements.length} entries`}
+                  </button>
+                )}
               </div>
-              <div className="flex-1">
-                <p className="font-inter font-semibold text-sm text-on-surface">Health Connect</p>
-                <p className="font-inter text-[10px] text-on-surface-variant">Sync weight, body fat & workouts from Health Connect</p>
+            )}
+
+            {/* Fitness Hub */}
+            <div className="space-y-2">
+              <p className="font-inter text-xs font-semibold uppercase tracking-wider text-outline px-1">Fitness</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => navigate('/hobbies/fitness')}
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[22px] text-orange-600">fitness_center</span>
+                  </div>
+                  <div>
+                    <p className="font-manrope font-bold text-sm text-on-surface">Sports</p>
+                    <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">
+                      {sportStats.monthly} sport sessions this month
+                    </p>
+                  </div>
+                  <span className="font-inter text-[10px] font-semibold text-orange-600">{sportStats.total} sessions total</span>
+                </button>
+                <button
+                  onClick={() => navigate('/hobbies/gym')}
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[22px] text-violet-600">exercise</span>
+                  </div>
+                  <div>
+                    <p className="font-manrope font-bold text-sm text-on-surface">Gym</p>
+                    <p className="font-inter text-[10px] text-on-surface-variant mt-0.5">Sets, reps & weights</p>
+                  </div>
+                  <span className="font-inter text-[10px] font-semibold text-violet-600">Track detailed workouts</span>
+                </button>
               </div>
+            </div>
+          </>
+        )}
+
+        {/* ── SYNC TAB ── */}
+        {tab === 'sync' && (
+          <div className="space-y-4">
+            {/* Health Connect — Android only */}
+            {isNative ? (
+              <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-950/30 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[22px] text-green-600">health_and_safety</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-inter font-semibold text-sm text-on-surface">Health Connect</p>
+                    <p className="font-inter text-[10px] text-on-surface-variant">Import weight, body fat & workouts from Health Connect</p>
+                  </div>
+                </div>
+                {hcLastSync && (
+                  <p className="font-inter text-[10px] text-outline mb-3">
+                    Last synced: {new Date(hcLastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+                {hcStatus && (
+                  <p className={`font-inter text-xs rounded-lg px-3 py-2 mb-3 select-all cursor-text ${hcStatus.includes('failed') || hcStatus.includes('not granted') || hcStatus.includes('not available') || hcStatus.includes('needs') ? 'bg-error-container/20 text-error' : 'bg-tertiary/10 text-tertiary'}`}>
+                    {hcStatus}
+                  </p>
+                )}
+                {hcNeedsSetup && (
+                  <button
+                    onClick={() => HealthConnect.openHealthConnect().catch(() => {})}
+                    className="mb-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-surface-container text-primary font-inter font-medium text-xs"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                    Grant permissions in Health Connect
+                  </button>
+                )}
+                <button
+                  onClick={syncFromHealthConnect}
+                  disabled={hcSyncing}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-on-primary rounded-xl font-inter font-medium text-sm disabled:opacity-60"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${hcSyncing ? 'animate-spin' : ''}`}>
+                    {hcSyncing ? 'progress_activity' : 'sync'}
+                  </span>
+                  {hcSyncing ? 'Syncing…' : 'Sync from Health Connect'}
+                </button>
+              </div>
+            ) : (
+              <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[22px] text-outline">health_and_safety</span>
+                  </div>
+                  <div>
+                    <p className="font-inter font-semibold text-sm text-on-surface">Health Connect</p>
+                    <p className="font-inter text-[10px] text-outline">Available on Android only</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Google Sheets export */}
+            <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[22px] text-emerald-600">table_chart</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-inter font-semibold text-sm text-on-surface">Google Sheets Export</p>
+                  <p className="font-inter text-[10px] text-on-surface-variant">Export all {measurements.length} measurements to a Sheets spreadsheet</p>
+                </div>
+              </div>
+              {sheetsStatus && (
+                <p className={`font-inter text-xs rounded-lg px-3 py-2 mb-3 select-all cursor-text ${sheetsStatus.includes('failed') || sheetsStatus.includes('Connect') ? 'bg-error-container/20 text-error' : 'bg-tertiary/10 text-tertiary'}`}>
+                  {sheetsStatus}
+                </p>
+              )}
               <button
-                onClick={syncFromHealthConnect}
-                disabled={hcSyncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary rounded-lg font-inter font-medium text-xs disabled:opacity-60"
+                onClick={syncToSheets}
+                disabled={sheetsSyncing || measurements.length === 0}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-inter font-medium text-sm disabled:opacity-60"
               >
-                <span className={`material-symbols-outlined text-[14px] ${hcSyncing ? 'animate-spin' : ''}`}>
-                  {hcSyncing ? 'progress_activity' : 'sync'}
+                <span className={`material-symbols-outlined text-[18px] ${sheetsSyncing ? 'animate-spin' : ''}`}>
+                  {sheetsSyncing ? 'progress_activity' : 'upload'}
                 </span>
-                {hcSyncing ? 'Syncing…' : 'Sync Now'}
+                {sheetsSyncing ? 'Exporting…' : 'Export to Sheets'}
               </button>
             </div>
-            {hcStatus && (
-              <p
-                className={`font-inter text-xs rounded-lg px-3 py-2 select-all cursor-text ${hcStatus.includes('failed') || hcStatus.includes('not granted') || hcStatus.includes('not available') || hcStatus.includes('needs') ? 'bg-error-container/20 text-error' : 'bg-tertiary/10 text-tertiary'}`}
-              >
-                {hcStatus}
-              </p>
-            )}
-            {hcNeedsSetup && (
-              <button
-                onClick={() => HealthConnect.openHealthConnect().catch(() => {})}
-                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-surface-container text-primary font-inter font-medium text-xs"
-              >
-                <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                Grant permissions in Health Connect
-              </button>
-            )}
-            {hcLastSync && (
-              <p className="font-inter text-[10px] text-outline mt-1">
-                Last synced: {new Date(hcLastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            )}
+
+            <p className="font-inter text-[10px] text-outline text-center px-4">
+              Drive sync keeps your health data backed up automatically. Sheets export creates a spreadsheet for analysis.
+            </p>
           </div>
         )}
 
+        {/* ── PROFILE TAB ── */}
+        {tab === 'profile' && (
+          <div className="space-y-4">
+            <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card space-y-4">
+              <p className="font-inter font-semibold text-sm text-on-surface">Body Measurements</p>
+
+              <div className="space-y-1">
+                <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Height (cm)</label>
+                <input type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="e.g. 173"
+                  className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm outline-none focus:border-primary/50" />
+              </div>
+            </div>
+
+            <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card space-y-4">
+              <p className="font-inter font-semibold text-sm text-on-surface">Body Fat Goals</p>
+
+              <div className="space-y-1">
+                <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Target Body Fat Range (%)</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" step="0.5" value={bfMin} onChange={e => setBfMin(e.target.value)} placeholder="Min"
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm outline-none focus:border-primary/50" />
+                  <span className="font-inter text-sm text-outline shrink-0">to</span>
+                  <input type="number" step="0.5" value={bfMax} onChange={e => setBfMax(e.target.value)} placeholder="Max"
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm outline-none focus:border-primary/50" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-card space-y-4">
+              <p className="font-inter font-semibold text-sm text-on-surface">Weight & Muscle Targets</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Target Weight (kg)</label>
+                  <input type="number" step="0.5" value={targetWeight} onChange={e => setTargetWeight(e.target.value)} placeholder="optional"
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm outline-none focus:border-primary/50" />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Target Muscle (kg)</label>
+                  <input type="number" step="0.5" value={targetMuscle} onChange={e => setTargetMuscle(e.target.value)} placeholder="optional"
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm outline-none focus:border-primary/50" />
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveProfile}
+              className={`w-full py-3 rounded-xl font-inter font-semibold text-sm transition-colors ${profileSaved ? 'bg-tertiary text-on-primary' : 'bg-primary text-on-primary hover:bg-primary/90'}`}
+            >
+              {profileSaved ? '✓ Saved' : 'Save Profile'}
+            </button>
+          </div>
+        )}
 
       </main>
 
-      <button onClick={() => { setEditEntry(null); setLogOpen(true); }}
-        className="fixed right-4 bg-primary text-on-primary rounded-full shadow-fab flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-40 w-14 h-14"
-        style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
-        <span className="material-symbols-outlined text-[28px]">add</span>
-      </button>
+      {tab === 'body' && (
+        <button onClick={() => { setEditEntry(null); setLogOpen(true); }}
+          className="fixed right-4 bg-primary text-on-primary rounded-full shadow-fab flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-40 w-14 h-14"
+          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
+          <span className="material-symbols-outlined text-[28px]">add</span>
+        </button>
+      )}
 
       <LogModal open={logOpen} onClose={() => { setLogOpen(false); setEditEntry(null); }} measurement={editEntry} />
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <MetricModal config={metricModal} open={!!metricModal} onClose={() => setMetricModal(null)}
         measurements={measurements} calcBMI={calcBMI} />
-
     </div>
   );
 }

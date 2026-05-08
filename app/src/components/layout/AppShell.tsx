@@ -5,6 +5,8 @@ import { useSyncStore } from '../../store/syncStore';
 import { useHobbyStore } from '../../store/hobbyStore';
 import { openSpotifyAuth } from '../../services/spotifyAuth';
 import { useThemeStore } from '../../store/themeStore';
+import FocusMode from '../FocusMode';
+import { useTimerStore } from '../../store/timerStore';
 
 const PULL_THRESHOLD = 72;
 
@@ -15,6 +17,7 @@ export default function AppShell() {
   const profile = useSyncStore((s) => s.profile);
   const isTokenValid = useSyncStore((s) => s.isTokenValid);
   const { mode, resolvedDark } = useThemeStore();
+  const focusTaskId = useTimerStore((s) => s.focusTaskId);
   const [sessionExpired, setSessionExpired] = useState(false);
   const spotifyToken = useHobbyStore((s) => s.spotifyToken);
   const isSpotifyValid = useHobbyStore((s) => s.isSpotifyValid);
@@ -181,6 +184,7 @@ export default function AppShell() {
         <Outlet />
       </div>
       <BottomNav />
+      {focusTaskId && <FocusMode />}
     </div>
   );
 }

@@ -1,11 +1,13 @@
-import { useMemo } from 'react';
-import { format, startOfWeek, endOfWeek, addDays, getDaysInMonth } from 'date-fns';
+import { useState, useMemo } from 'react';
+import { format, startOfWeek, endOfWeek, addDays, getDaysInMonth, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import TopBar from '../components/layout/TopBar';
 import { useHabitsStore } from '../store/habitsStore';
 import { useFitnessStore } from '../store/fitnessStore';
 import { useTasksStore } from '../store/tasksStore';
 import { useFinanceStore } from '../store/financeStore';
 import { useBooksStore } from '../store/booksStore';
+
+type DigestPeriod = 'weekly' | 'monthly' | 'yearly';
 type DigestFreq = 'daily' | 'weekly' | 'monthly';
 
 function StatCard({
@@ -26,11 +28,31 @@ function StatCard({
 }
 
 export default function WeeklyDigest() {
+  const [period, setPeriod] = useState<DigestPeriod>('weekly');
+
   const now = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-  const weekStartStr = format(weekStart, 'yyyy-MM-dd');
-  const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+
+  const rangeStart = period === 'weekly'
+    ? format(weekStart, 'yyyy-MM-dd')
+    : period === 'monthly'
+    ? format(startOfMonth(now), 'yyyy-MM-dd')
+    : format(startOfYear(now), 'yyyy-MM-dd');
+
+  const rangeEnd = period === 'weekly'
+    ? format(weekEnd, 'yyyy-MM-dd')
+    : period === 'monthly'
+    ? format(endOfMonth(now), 'yyyy-MM-dd')
+    : format(endOfYear(now), 'yyyy-MM-dd');
+
+  const periodTitle = period === 'weekly' ? 'This Week' : period === 'monthly' ? 'This Month' : 'This Year';
+  const periodLabel = period === 'weekly'
+    ? `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`
+    : period === 'monthly'
+    ? format(now, 'MMMM yyyy')
+    : String(now.getFullYear());
+  const periodSub = period === 'weekly' ? 'This week' : period === 'monthly' ? format(now, 'MMMM') : String(now.getFullYear());
 
   const habits = useHabitsStore(s => s.habits);
   const entries = useHabitsStore(s => s.entries);
@@ -44,15 +66,24 @@ export default function WeeklyDigest() {
   type HabitRow = { name: string; icon: string; color: string; done: number; total: number; label: string };
 
   const habitStats = useMemo(() => {
+    const rStart = new Date(rangeStart + 'T00:00:00');
+    const rEnd = new Date(rangeEnd + 'T00:00:00');
+    const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0);
+    const effectiveEnd = todayDate < rEnd ? todayDate : rEnd;
+    const daysSoFar = Math.max(1, Math.round((effectiveEnd.getTime() - rStart.getTime()) / 86400000) + 1);
+    const weeksInPeriod = Math.max(1, Math.ceil(daysSoFar / 7));
+
+    const monthStr = format(now, 'yyyy-MM');
+    const daysInMonthVal = getDaysInMonth(now);
+    const dayOfMonth = now.getDate();
+
+    // For weekly period still show week-specific tracking
     const weekDaysSoFar: string[] = [];
     for (let i = 0; i <= 6; i++) {
       const d = addDays(weekStart, i);
       if (d <= now) weekDaysSoFar.push(format(d, 'yyyy-MM-dd'));
     }
-
-    const monthStr = format(now, 'yyyy-MM');
-    const daysInMonth = getDaysInMonth(now);
-    const dayOfMonth = now.getDate();
+    const weekDaysCount = weekDaysSoFar.length;
 
     const byFreq: Record<DigestFreq, HabitRow[]> = { daily: [], weekly: [], monthly: [] };
     let trackDone = 0, trackPossible = 0;
@@ -62,19 +93,33 @@ export default function WeeklyDigest() {
       let done = 0, total = 0, label = '';
 
       if (freq === 'daily' || freq === 'weekdays') {
-        done = entries.filter(e => e.habitId === h.id && e.completed && e.date >= weekStartStr && e.date <= weekEndStr).length;
-        total = weekDaysSoFar.length;
-        label = `${done}/${total} days this week`;
+        done = entries.filter(e => e.habitId === h.id && e.completed && e.date >= rangeStart && e.date <= rangeEnd).length;
+        total = period === 'weekly' ? weekDaysCount : daysSoFar;
+        label = `${done}/${total} days`;
         trackDone += done; trackPossible += total;
       } else if (freq === 'weekly') {
-        done = entries.filter(e => e.habitId === h.id && e.completed && e.date >= weekStartStr && e.date <= weekEndStr).length;
-        total = h.targetDays;
-        label = `${done}/${total} target this week`;
+        done = entries.filter(e => e.habitId === h.id && e.completed && e.date >= rangeStart && e.date <= rangeEnd).length;
+        if (period === 'weekly') {
+          total = h.targetDays;
+          label = `${done}/${total} target this week`;
+        } else {
+          total = h.targetDays * weeksInPeriod;
+          label = `${done}/${total}`;
+        }
         trackDone += done; trackPossible += total;
-      } else {
-        done = entries.filter(e => e.habitId === h.id && e.completed && e.date.startsWith(monthStr)).length;
-        total = h.targetDays;
-        label = `${done}/${total} this month (day ${dayOfMonth}/${daysInMonth})`;
+      } else { // monthly
+        if (period === 'yearly') {
+          done = entries.filter(e => e.habitId === h.id && e.completed && e.date >= rangeStart && e.date <= rangeEnd).length;
+          const monthsInYear = Math.max(1, now.getMonth() + 1);
+          total = h.targetDays * monthsInYear;
+          label = `${done}/${total} this year`;
+        } else {
+          done = entries.filter(e => e.habitId === h.id && e.completed && e.date.startsWith(monthStr)).length;
+          total = h.targetDays;
+          label = period === 'weekly'
+            ? `${done}/${total} this month (day ${dayOfMonth}/${daysInMonthVal})`
+            : `${done}/${total} this month`;
+        }
       }
 
       const bucket: DigestFreq = (freq === 'daily' || freq === 'weekdays') ? 'daily' : freq === 'weekly' ? 'weekly' : 'monthly';
@@ -83,11 +128,11 @@ export default function WeeklyDigest() {
 
     const pct = trackPossible > 0 ? Math.round((trackDone / trackPossible) * 100) : 0;
     return { byFreq, trackDone, trackPossible, pct };
-  }, [activeHabits, entries, weekStartStr, weekEndStr]);
+  }, [activeHabits, entries, rangeStart, rangeEnd, period]);
 
   const fitnessStats = useMemo(() => {
-    const gym = gymSessions.filter(s => s.date >= weekStartStr && s.date <= weekEndStr);
-    const sport = sportSessions.filter(s => s.date >= weekStartStr && s.date <= weekEndStr);
+    const gym = gymSessions.filter(s => s.date >= rangeStart && s.date <= rangeEnd);
+    const sport = sportSessions.filter(s => s.date >= rangeStart && s.date <= rangeEnd);
     const gymCalories = gym.reduce((acc, s) => acc + (s.calories ?? 0), 0);
     const sportCalories = sport.reduce((acc, s) => acc + (s.calories ?? 0), 0);
     const gymSec = gym.reduce((acc, s) => acc + (s.duration ?? 0), 0);
@@ -100,30 +145,30 @@ export default function WeeklyDigest() {
       gymTypes: [...new Set(gym.map(s => s.type))],
       sportTypes: [...new Set(sport.map(s => s.sport))],
     };
-  }, [gymSessions, sportSessions, weekStartStr, weekEndStr]);
+  }, [gymSessions, sportSessions, rangeStart, rangeEnd]);
 
   const taskStats = useMemo(() => {
-    const done = tasks.filter(t => t.status === 'done' && t.updatedAt >= weekStartStr && t.updatedAt <= weekEndStr + 'T23:59:59');
-    const created = tasks.filter(t => t.createdAt >= weekStartStr && t.createdAt <= weekEndStr + 'T23:59:59');
+    const done = tasks.filter(t => t.status === 'done' && t.updatedAt >= rangeStart && t.updatedAt <= rangeEnd + 'T23:59:59');
+    const created = tasks.filter(t => t.createdAt >= rangeStart && t.createdAt <= rangeEnd + 'T23:59:59');
     return { completed: done.length, created: created.length };
-  }, [tasks, weekStartStr, weekEndStr]);
+  }, [tasks, rangeStart, rangeEnd]);
 
   const financeStats = useMemo(() => {
-    const weekTxns = transactions.filter(t => t.date >= weekStartStr && t.date <= weekEndStr);
-    const spent = weekTxns.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
-    const income = weekTxns.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+    const periodTxns = transactions.filter(t => t.date >= rangeStart && t.date <= rangeEnd);
+    const spent = periodTxns.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+    const income = periodTxns.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
     const byCategory: Record<string, number> = {};
-    weekTxns.filter(t => t.type === 'expense').forEach(t => {
+    periodTxns.filter(t => t.type === 'expense').forEach(t => {
       byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
     });
     const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
     return { spent, income, topCategory };
-  }, [transactions, weekStartStr, weekEndStr]);
+  }, [transactions, rangeStart, rangeEnd]);
 
   const readingStats = useMemo(() => {
-    const finishedThisWeek = bookReviews.filter(b => b.dateRead && b.dateRead >= weekStartStr && b.dateRead <= weekEndStr);
-    return { toRead: readingList.length, finished: finishedThisWeek.length };
-  }, [readingList, bookReviews, weekStartStr, weekEndStr]);
+    const finished = bookReviews.filter(b => b.dateRead && b.dateRead >= rangeStart && b.dateRead <= rangeEnd);
+    return { toRead: readingList.length, finished: finished.length };
+  }, [readingList, bookReviews, rangeStart, rangeEnd]);
 
   const HABIT_COLOR_MAP: Record<string, string> = {
     teal: '#14b8a6', purple: '#8b5cf6', blue: '#3b82f6', orange: '#f97316',
@@ -131,18 +176,32 @@ export default function WeeklyDigest() {
     indigo: '#6366f1', cyan: '#06b6d4',
   };
 
+  const noFitness = fitnessStats.gymCount === 0 && fitnessStats.sportCount === 0;
+
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Weekly Digest" />
+      <TopBar title="Digest" />
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-5">
 
-        {/* Week range header */}
+        {/* Period tabs */}
+        <div className="flex gap-1 bg-surface-container rounded-xl p-1">
+          {(['weekly', 'monthly', 'yearly'] as DigestPeriod[]).map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              className={`flex-1 py-2 rounded-lg font-inter text-sm font-semibold transition-colors ${
+                period === p
+                  ? 'bg-background text-on-surface shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}>
+              {p === 'weekly' ? 'Weekly' : p === 'monthly' ? 'Monthly' : 'Yearly'}
+            </button>
+          ))}
+        </div>
+
+        {/* Period range header */}
         <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
-          <p className="font-inter text-xs font-semibold uppercase tracking-wider text-primary/70">This Week</p>
-          <p className="font-manrope font-bold text-base text-on-surface mt-0.5">
-            {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
-          </p>
+          <p className="font-inter text-xs font-semibold uppercase tracking-wider text-primary/70">{periodTitle}</p>
+          <p className="font-manrope font-bold text-base text-on-surface mt-0.5">{periodLabel}</p>
           <p className="font-inter text-xs text-on-surface-variant mt-0.5">Auto-updated · refreshes with your data</p>
         </div>
 
@@ -153,7 +212,6 @@ export default function WeeklyDigest() {
             Habits
           </h3>
 
-          {/* Weekly % ring — daily + weekly only */}
           {habitStats.trackPossible > 0 && (
             <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
               <div className="px-4 py-3 flex items-center gap-3">
@@ -179,12 +237,11 @@ export default function WeeklyDigest() {
             const rows = habitStats.byFreq[freq];
             if (rows.length === 0) return null;
             const freqLabel = freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : 'Monthly';
-            const freqSub = freq === 'monthly' ? format(now, 'MMMM') : 'This week';
             return (
               <div key={freq} className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
                 <div className="px-4 py-2 border-b border-outline-variant/20 flex items-center justify-between">
                   <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">{freqLabel}</p>
-                  <p className="font-inter text-[10px] text-outline">{freqSub}</p>
+                  <p className="font-inter text-[10px] text-outline">{periodSub}</p>
                 </div>
                 <div className="divide-y divide-outline-variant/10">
                   {rows.map(h => (
@@ -219,9 +276,9 @@ export default function WeeklyDigest() {
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <StatCard icon="fitness_center" label="Gym Sessions" value={fitnessStats.gymCount}
-              sub={fitnessStats.gymTypes.join(', ') || 'None this week'} color="#f97316" />
+              sub={fitnessStats.gymTypes.join(', ') || `None ${periodSub.toLowerCase()}`} color="#f97316" />
             <StatCard icon="sports_soccer" label="Sports" value={fitnessStats.sportCount}
-              sub={fitnessStats.sportTypes.join(', ') || 'None this week'} color="#22c55e" />
+              sub={fitnessStats.sportTypes.join(', ') || `None ${periodSub.toLowerCase()}`} color="#22c55e" />
             {fitnessStats.totalCalories > 0 && (
               <StatCard icon="local_fire_department" label="Calories Burned" value={`${fitnessStats.totalCalories} kcal`}
                 sub={`${fitnessStats.gymCount + fitnessStats.sportCount} sessions`} color="#ef4444" />
@@ -232,8 +289,8 @@ export default function WeeklyDigest() {
                 sub={`${(fitnessStats.totalSeconds / 3600).toFixed(1)}h total`} color="#8b5cf6" />
             )}
           </div>
-          {fitnessStats.gymCount === 0 && fitnessStats.sportCount === 0 && (
-            <p className="font-inter text-xs text-outline text-center py-2">No fitness logged this week</p>
+          {noFitness && (
+            <p className="font-inter text-xs text-outline text-center py-2">No fitness logged {periodSub.toLowerCase()}</p>
           )}
         </section>
 
@@ -245,9 +302,9 @@ export default function WeeklyDigest() {
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <StatCard icon="check_circle" label="Completed" value={taskStats.completed}
-              sub="tasks closed this week" color="#22c55e" />
+              sub={`tasks closed ${periodSub.toLowerCase()}`} color="#22c55e" />
             <StatCard icon="add_task" label="Created" value={taskStats.created}
-              sub="new tasks this week" color="#3b82f6" />
+              sub={`new tasks ${periodSub.toLowerCase()}`} color="#3b82f6" />
           </div>
         </section>
 
@@ -262,7 +319,7 @@ export default function WeeklyDigest() {
               sub={financeStats.topCategory ? `Top: ${financeStats.topCategory[0]}` : 'No expenses'} color="#ef4444" />
             {financeStats.income > 0 && (
               <StatCard icon="savings" label="Income" value={`₹${financeStats.income.toLocaleString()}`}
-                sub="received this week" color="#22c55e" />
+                sub={`received ${periodSub.toLowerCase()}`} color="#22c55e" />
             )}
           </div>
         </section>
@@ -278,7 +335,7 @@ export default function WeeklyDigest() {
               sub="books to read" color="#06b6d4" />
             {readingStats.finished > 0 && (
               <StatCard icon="done_all" label="Finished" value={readingStats.finished}
-                sub="books this week" color="#22c55e" />
+                sub={`books ${periodSub.toLowerCase()}`} color="#22c55e" />
             )}
           </div>
         </section>

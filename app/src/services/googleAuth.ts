@@ -1,6 +1,12 @@
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 
+export function getOAuthRedirectUri(): string {
+  return Capacitor.isNativePlatform()
+    ? 'basilapp://oauth2callback'
+    : `${window.location.origin}/`;
+}
+
 export async function openAuthUrl(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     await Browser.open({ url, windowName: '_self' });
@@ -47,9 +53,9 @@ export async function generateCodeChallenge(verifier: string): Promise<string> {
 
 export async function buildAuthCodeUrl(clientId: string): Promise<string> {
   const verifier = generateCodeVerifier();
-  sessionStorage.setItem('google_pkce_verifier', verifier);
+  localStorage.setItem('google_pkce_verifier', verifier);
   const challenge = await generateCodeChallenge(verifier);
-  const redirectUri = `${window.location.origin}/`;
+  const redirectUri = getOAuthRedirectUri();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,

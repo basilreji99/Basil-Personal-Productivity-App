@@ -407,6 +407,7 @@ type Tab = 'reviews' | 'watchlist';
 export default function Movies() {
   const { reviews, watchlist } = useHobbyStore();
   const [tab, setTab] = useState<Tab>('reviews');
+  const [searchQuery, setSearchQuery] = useState('');
   const [reviewOpen, setReviewOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [editReview, setEditReview] = useState<MediaReview | null>(null);
@@ -416,13 +417,22 @@ export default function Movies() {
 
   const filteredReviews = useMemo(() => {
     let list = filter === 'all' ? reviews : reviews.filter(r => r.type === filter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(r => r.title.toLowerCase().includes(q));
+    }
     if (sortRating) list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [reviews, filter, sortRating]);
+  }, [reviews, filter, sortRating, searchQuery]);
 
-  const filteredWatchlist = useMemo(() =>
-    filter === 'all' ? watchlist : watchlist.filter(w => w.type === filter),
-  [watchlist, filter]);
+  const filteredWatchlist = useMemo(() => {
+    let list = filter === 'all' ? watchlist : watchlist.filter(w => w.type === filter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(w => w.title.toLowerCase().includes(q));
+    }
+    return list;
+  }, [watchlist, filter, searchQuery]);
 
   const avgRating = reviews.length > 0
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
@@ -451,6 +461,23 @@ export default function Movies() {
             </div>
           </div>
         )}
+
+        {/* Search bar */}
+        <div className="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 h-10 border border-outline-variant/20">
+          <span className="material-symbols-outlined text-[16px] text-outline shrink-0">search</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by title..."
+            className="flex-1 bg-transparent font-inter text-sm text-on-surface placeholder:text-outline outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="shrink-0">
+              <span className="material-symbols-outlined text-[16px] text-outline">close</span>
+            </button>
+          )}
+        </div>
 
         {/* Tabs */}
         <div className="flex bg-surface-container rounded-xl p-1 gap-1">

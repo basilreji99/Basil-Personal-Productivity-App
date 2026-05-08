@@ -19,12 +19,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Google OAuth callback from Chrome Custom Tab -->
+            <!-- Google OAuth callback — custom scheme, reliably routed by Chrome Custom Tab -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="localhost" />
+                <data android:scheme="basilapp" android:host="oauth2callback" />
             </intent-filter>
 
             <!-- Spotify OAuth callback -->

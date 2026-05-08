@@ -61,14 +61,14 @@ export const useSyncStore = create<SyncState>()(
       setClientSecret: (clientSecret) => set({ clientSecret }),
 
       setToken: async (accessToken, tokenExpiry, refreshToken) => {
+        const update: Partial<SyncState> = { accessToken, tokenExpiry };
+        if (refreshToken !== undefined) update.refreshToken = refreshToken;
+        set(update);
         try {
-          const update: Partial<SyncState> = { accessToken, tokenExpiry };
-          if (refreshToken !== undefined) update.refreshToken = refreshToken;
-          set(update);
           const profile = await fetchGoogleProfile(accessToken);
-          set({ profile });
+          if (profile) set({ profile });
         } catch {
-          set({ accessToken: null, tokenExpiry: null, profile: null });
+          // profile fetch failed — keep the token, login still succeeded
         }
       },
 

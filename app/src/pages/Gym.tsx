@@ -3,7 +3,7 @@ import TopBar from '../components/layout/TopBar';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useGymStore } from '../store/gymStore';
-import { BUILTIN_EXERCISES, MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS } from '../data/exercises';
+import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS } from '../data/exercises';
 import { hcExerciseTypeName } from '../services/healthConnect';
 import type {
   GymExercise,
@@ -12,7 +12,6 @@ import type {
   GymSession,
   WorkoutTemplate,
   MuscleGroup,
-  Equipment,
 } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -510,95 +509,32 @@ function SessionDetailModal({
   );
 }
 
-// ─── Custom Exercise Modal ────────────────────────────────────────────────────
 
-function CustomExerciseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addCustomExercise } = useGymStore();
-  const [name, setName] = useState('');
-  const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>('chest');
-  const [equipment, setEquipment] = useState<Equipment>('barbell');
-
-  function handleSave() {
-    if (!name.trim()) return;
-    addCustomExercise({ name: name.trim(), muscleGroup, equipment });
-    setName('');
-    onClose();
-  }
-
-  const muscles = Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[];
-  const equipments = Object.keys(EQUIPMENT_LABELS) as Equipment[];
-
-  return (
-    <Modal open={open} onClose={onClose} title="New Exercise" size="sm">
-      <div className="p-4 space-y-4">
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Exercise name"
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/50"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Muscle Group</label>
-          <select
-            value={muscleGroup}
-            onChange={(e) => setMuscleGroup(e.target.value as MuscleGroup)}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none"
-          >
-            {muscles.map((m) => <option key={m} value={m}>{MUSCLE_GROUP_LABELS[m]}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Equipment</label>
-          <select
-            value={equipment}
-            onChange={(e) => setEquipment(e.target.value as Equipment)}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none"
-          >
-            {equipments.map((eq) => <option key={eq} value={eq}>{EQUIPMENT_LABELS[eq]}</option>)}
-          </select>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter text-sm">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-primary text-on-primary font-inter font-medium text-sm">Save</button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
-
-type Tab = 'history' | 'templates' | 'exercises';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Gym() {
   const {
-    sessions, templates, customExercises, activeSession,
-    getAllExercises, deleteSession, deleteTemplate, deleteCustomExercise,
+    sessions, customExercises, activeSession,
+    getAllExercises, deleteSession,
   } = useGymStore();
 
-  const [tab, setTab]                   = useState<Tab>('history');
   const [startOpen, setStartOpen]       = useState(false);
   const [detailSession, setDetailSession] = useState<GymSession | null>(null);
-  const [customExOpen, setCustomExOpen] = useState(false);
 
   const allExercises = useMemo(() => getAllExercises(), [sessions, customExercises]);
 
   const sortedSessions = useMemo(
-    () => [...sessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+    () => [...sessions]
+      .filter((s) => s.source !== 'health_connect')
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
     [sessions]
   );
 
-  // Monthly stats
   const monthStats = useMemo(() => {
     const now = new Date();
     const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthly = sessions.filter((s) => s.startedAt.startsWith(monthStr));
+    const monthly = sessions.filter((s) => s.startedAt.startsWith(monthStr) && s.source !== 'health_connect');
     const totalVol = monthly.reduce((a, s) => a + (s.totalVolume ?? 0), 0);
     const totalSets = monthly.reduce((a, s) => a + (s.totalSets ?? 0), 0);
     return { count: monthly.length, volume: totalVol, sets: totalSets };
@@ -617,7 +553,7 @@ export default function Gym() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Gym Tracker" showBack />
+      <TopBar title="Gym" showBack />
 
       <main className="max-w-screen-xl mx-auto pb-32" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
 
@@ -651,23 +587,8 @@ export default function Gym() {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mx-4 bg-surface-container rounded-xl p-1 mb-4">
-          {(['history', 'templates', 'exercises'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2 rounded-lg font-inter font-medium text-xs capitalize transition-all ${
-                tab === t ? 'bg-surface-container-lowest shadow-sm text-on-surface' : 'text-on-surface-variant'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-
-        {/* ── History tab ── */}
-        {tab === 'history' && (
+        {/* ── History ── */}
+        {(
           <div className="px-4 space-y-3">
             {sortedSessions.length === 0 ? (
               <div className="text-center py-16">
@@ -730,117 +651,12 @@ export default function Gym() {
           </div>
         )}
 
-        {/* ── Templates tab ── */}
-        {tab === 'templates' && (
-          <div className="px-4 space-y-3">
-            {templates.length === 0 ? (
-              <div className="text-center py-16">
-                <span className="material-symbols-outlined text-[56px] text-outline block mb-3">content_copy</span>
-                <p className="font-manrope font-semibold text-on-surface mb-1">No templates yet</p>
-                <p className="font-work-sans text-sm text-on-surface-variant">After a workout, save it as a template</p>
-              </div>
-            ) : (
-              templates.map((tpl) => (
-                <div key={tpl.id} className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-inter font-semibold text-sm text-on-surface">{tpl.name}</p>
-                      <p className="font-inter text-xs text-outline">{tpl.exercises.length} exercises</p>
-                    </div>
-                    <button
-                      onClick={() => { useGymStore.getState().startSession(tpl.name, tpl.id); }}
-                      className="px-3 py-1.5 bg-primary text-on-primary rounded-lg font-inter font-medium text-xs shrink-0"
-                    >
-                      Start
-                    </button>
-                    <button
-                      onClick={() => deleteTemplate(tpl.id)}
-                      className="p-1.5 text-on-surface-variant hover:text-error transition-colors shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">delete</span>
-                    </button>
-                  </div>
-                  {tpl.exercises.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {tpl.exercises.map((entry) => {
-                        const ex = allExercises.find((e) => e.id === entry.exerciseId);
-                        return ex ? (
-                          <span key={entry.id} className="font-inter text-[9px] px-2 py-0.5 bg-surface-container rounded-full text-on-surface-variant">
-                            {ex.name}
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ── Exercises tab ── */}
-        {tab === 'exercises' && (
-          <div className="px-4 space-y-3">
-            <button
-              onClick={() => setCustomExOpen(true)}
-              className="w-full flex items-center gap-2 px-4 py-3 bg-surface-container-lowest rounded-xl shadow-sm text-primary font-inter font-medium text-sm"
-            >
-              <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              Create Custom Exercise
-            </button>
-
-            {customExercises.length > 0 && (
-              <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-                <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline px-4 py-2 border-b border-outline-variant/10">
-                  Custom
-                </p>
-                {customExercises.map((ex) => (
-                  <div key={ex.id} className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant/10 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-inter font-semibold text-sm text-on-surface">{ex.name}</p>
-                      <p className="font-inter text-[10px] text-outline">
-                        {MUSCLE_GROUP_LABELS[ex.muscleGroup]} · {EQUIPMENT_LABELS[ex.equipment]}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => deleteCustomExercise(ex.id)}
-                      className="p-1.5 text-on-surface-variant hover:text-error transition-colors shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">delete</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Built-in grouped by muscle */}
-            {(Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[]).map((group) => {
-              const exs = BUILTIN_EXERCISES.filter((e) => e.muscleGroup === group);
-              if (exs.length === 0) return null;
-              return (
-                <div key={group} className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
-                  <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline px-4 py-2 border-b border-outline-variant/10">
-                    {MUSCLE_GROUP_LABELS[group]}
-                  </p>
-                  {exs.map((ex) => (
-                    <div key={ex.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-outline-variant/10 last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-inter text-sm text-on-surface">{ex.name}</p>
-                      </div>
-                      <span className="font-inter text-[9px] text-outline">{EQUIPMENT_LABELS[ex.equipment]}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </main>
 
       <StartWorkoutModal
         open={startOpen}
         onClose={() => setStartOpen(false)}
-        templates={templates}
+        templates={[]}
         onStart={(name, templateId) => useGymStore.getState().startSession(name, templateId)}
       />
 
@@ -855,7 +671,6 @@ export default function Gym() {
         }}
       />
 
-      <CustomExerciseModal open={customExOpen} onClose={() => setCustomExOpen(false)} />
     </div>
   );
 }

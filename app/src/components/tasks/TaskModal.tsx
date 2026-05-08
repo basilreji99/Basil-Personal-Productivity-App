@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -11,6 +11,7 @@ import { useSprintStore } from '../../store/sprintStore';
 import { useTagStore } from '../../store/tagStore';
 import { useNotesStore } from '../../store/notesStore';
 import { scheduleTaskNotifications } from '../../services/taskNotifications';
+import { useTimerStore } from '../../store/timerStore';
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string }[] = [
   { value: 'critical', label: 'Emergency', color: 'text-red-700 dark:text-red-400',    bg: 'bg-red-100 border-red-300 dark:bg-red-950/40 dark:border-red-800' },
@@ -37,13 +38,14 @@ function toHtml(text: string): string {
 }
 
 function DescriptionEditor({ content, onChange }: { content: string; onChange: (html: string) => void }) {
+  const [showToolbar, setShowToolbar] = useState(false);
   const editor = useEditor({
     extensions: [StarterKit, Underline],
     content: toHtml(content),
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: {
       attributes: {
-        class: 'min-h-[72px] max-h-[200px] overflow-y-auto outline-none font-work-sans text-sm text-on-surface leading-relaxed px-3 py-2',
+        class: 'min-h-[60px] max-h-[180px] overflow-y-auto outline-none font-work-sans text-sm text-on-surface leading-relaxed px-3 py-2',
       },
     },
   });
@@ -62,32 +64,30 @@ function DescriptionEditor({ content, onChange }: { content: string; onChange: (
 
   return (
     <div className="border border-outline-variant/30 rounded-lg overflow-hidden focus-within:border-primary/40 transition-colors">
-      <div className="flex gap-0.5 p-1.5 border-b border-outline-variant/20 bg-surface-container/50 flex-wrap">
-        <Btn active={editor.isActive('bold')} onPress={() => editor.chain().focus().toggleBold().run()}>
-          <strong>B</strong>
-        </Btn>
-        <Btn active={editor.isActive('italic')} onPress={() => editor.chain().focus().toggleItalic().run()}>
-          <em>I</em>
-        </Btn>
-        <Btn active={editor.isActive('underline')} onPress={() => editor.chain().focus().toggleUnderline().run()}>
-          <span className="underline">U</span>
-        </Btn>
-        <Btn active={editor.isActive('code')} onPress={() => editor.chain().focus().toggleCode().run()}>
-          {'</>'}
-        </Btn>
-        <div className="w-px h-5 bg-outline-variant/40 self-center mx-0.5" />
-        <Btn active={editor.isActive('bulletList')} onPress={() => editor.chain().focus().toggleBulletList().run()}>
-          • List
-        </Btn>
-        <Btn active={editor.isActive('orderedList')} onPress={() => editor.chain().focus().toggleOrderedList().run()}>
-          1. List
-        </Btn>
-        <div className="flex-1" />
-        <Btn active={false} onPress={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>
-          Clear
-        </Btn>
+      {showToolbar && (
+        <div className="flex gap-0.5 p-1.5 border-b border-outline-variant/20 bg-surface-container/50 flex-wrap">
+          <Btn active={editor.isActive('bold')} onPress={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></Btn>
+          <Btn active={editor.isActive('italic')} onPress={() => editor.chain().focus().toggleItalic().run()}><em>I</em></Btn>
+          <Btn active={editor.isActive('underline')} onPress={() => editor.chain().focus().toggleUnderline().run()}><span className="underline">U</span></Btn>
+          <Btn active={editor.isActive('code')} onPress={() => editor.chain().focus().toggleCode().run()}>{'</>'}</Btn>
+          <div className="w-px h-5 bg-outline-variant/40 self-center mx-0.5" />
+          <Btn active={editor.isActive('bulletList')} onPress={() => editor.chain().focus().toggleBulletList().run()}>• List</Btn>
+          <Btn active={editor.isActive('orderedList')} onPress={() => editor.chain().focus().toggleOrderedList().run()}>1. List</Btn>
+          <div className="flex-1" />
+          <Btn active={false} onPress={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</Btn>
+        </div>
+      )}
+      <div className="relative">
+        <EditorContent editor={editor} />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setShowToolbar((v) => !v); }}
+          className={`absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-inter font-semibold transition-colors ${showToolbar ? 'bg-primary text-on-primary' : 'bg-surface-container text-outline hover:text-on-surface'}`}
+          title="Toggle formatting"
+        >
+          Aa
+        </button>
       </div>
-      <EditorContent editor={editor} />
     </div>
   );
 }
@@ -102,13 +102,15 @@ interface TaskModalProps {
   parentId?: string | null;
   defaultIssueType?: IssueType;
   scopeEpicId?: string | null;
+  defaultSprintId?: string | null;
 }
 
 export default function TaskModal({
-  open, onClose, task, defaultStatus = 'backlog', parentId = null, defaultIssueType, scopeEpicId = null,
+  open, onClose, task, defaultStatus = 'backlog', parentId = null, defaultIssueType, scopeEpicId = null, defaultSprintId = null,
 }: TaskModalProps) {
   const { columns, tasks, addTask, updateTask } = useTasksStore();
   const { sprints } = useSprintStore();
+  const openFocus = useTimerStore((s) => s.openFocus);
   const { notes } = useNotesStore();
   const { recordUsage, getSuggestions } = useTagStore();
 
@@ -127,6 +129,7 @@ export default function TaskModal({
   const [dueDate, setDueDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [deadlineTime, setDeadlineTime] = useState('');
+  const [notifOffsets, setNotifOffsets] = useState<('2h' | '1h' | '30min')[]>(['1h', '30min']);
   const [recurring, setRecurring] = useState<RecurringFrequency | ''>('');
 
   // Available parents by issue type, scoped to a specific epic if opened from within one
@@ -171,21 +174,23 @@ export default function TaskModal({
       setDueDate(task.dueDate ? task.dueDate.split('T')[0] : '');
       setStartTime(task.startTime ?? '');
       setDeadlineTime(task.deadlineTime ?? '');
+      setNotifOffsets(task.notificationOffsets ?? ['1h', '30min']);
       setRecurring(task.recurring?.frequency ?? '');
     } else {
       setTitle('');
       setDescription('');
       setStatus(defaultStatus);
-      setPriority('none');
+      setPriority('low');
       setIssueType(defaultIssueType ?? 'task');
       setStoryPoints(undefined);
       setSelectedParentId(parentId);
-      setSprintId(null);
+      setSprintId(defaultSprintId);
       setLinkedNoteIds([]);
       setTags([]);
       setDueDate('');
       setStartTime('');
       setDeadlineTime('');
+      setNotifOffsets(['1h', '30min']);
       setRecurring('');
     }
     setTagInput('');
@@ -213,6 +218,7 @@ export default function TaskModal({
       dueDate: dueDate || null,
       startTime: hasTime && dueDate && startTime ? startTime : undefined,
       deadlineTime: hasTime && dueDate && deadlineTime ? deadlineTime : undefined,
+      notificationOffsets: hasTime && dueDate && (startTime || deadlineTime) ? notifOffsets : undefined,
       recurring: recurring
         ? { frequency: recurring as RecurringFrequency, nextDue: dueDate || new Date().toISOString() }
         : null,
@@ -233,6 +239,7 @@ export default function TaskModal({
         dueDate: dueDate || null,
         startTime: payload.startTime,
         deadlineTime: payload.deadlineTime,
+        notificationOffsets: payload.notificationOffsets,
       });
     }
     onClose();
@@ -253,6 +260,18 @@ export default function TaskModal({
 
   const modalTitle = task ? 'Edit' : parentId ? `New ${ISSUE_TYPES.find((t) => t.value === issueType)?.label}` : 'New Task';
 
+  // Auto-expand details if editing a task that already has values in those fields
+  const hasDetails = !!(
+    (sprintId) || storyPoints || recurring || startTime || deadlineTime ||
+    tags.length || linkedNoteIds.length || selectedParentId
+  );
+  const [showDetails, setShowDetails] = useState(false);
+  const detailsRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!open) { detailsRef.current = false; setShowDetails(false); return; }
+    if (!detailsRef.current && hasDetails) { setShowDetails(true); detailsRef.current = true; }
+  }, [open, hasDetails]);
+
   return (
     <Modal open={open} onClose={onClose} title={modalTitle} size="md">
       <div className="p-5 space-y-4">
@@ -268,271 +287,307 @@ export default function TaskModal({
         />
 
         {/* Issue type */}
-        <div className="space-y-1.5">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Type</label>
-          <div className="flex gap-1.5 flex-wrap">
-            {ISSUE_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setIssueType(t.value)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
-                  issueType === t.value ? t.cls + ' border-current ring-1 ring-current/30' : 'border-outline-variant text-on-surface-variant hover:border-outline'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[13px]">{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Parent */}
-        {parentOptions.length > 0 && (
-          <div className="space-y-1.5">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
-              Parent {issueType === 'story' ? 'Epic' : issueType === 'subtask' ? 'Task / Story' : 'Epic / Story'}
-            </label>
-            <select
-              value={selectedParentId ?? ''}
-              onChange={(e) => setSelectedParentId(e.target.value || null)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+        <div className="flex gap-1.5 flex-wrap">
+          {ISSUE_TYPES.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setIssueType(t.value)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
+                issueType === t.value ? t.cls + ' border-current ring-1 ring-current/30' : 'border-outline-variant text-on-surface-variant hover:border-outline'
+              }`}
             >
-              <option value="">— No parent —</option>
-              {parentOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  [{p.issueType.toUpperCase()}] {p.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+              <span className="material-symbols-outlined text-[13px]">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-        {/* Sprint */}
-        {sprints.length > 0 && (
-          <div className="space-y-1.5">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Sprint</label>
-            <select
-              value={sprintId ?? ''}
-              onChange={(e) => setSprintId(e.target.value || null)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+        {/* Priority + Due Date row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {PRIORITIES.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setPriority(p.value)}
+              className={`px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
+                priority === p.value ? `${p.bg} ${p.color}` : 'border-outline-variant text-on-surface-variant hover:border-outline'
+              }`}
             >
-              <option value="">— No sprint —</option>
-              {sprints.map((sp) => (
-                <option key={sp.id} value={sp.id}>
-                  {sp.name} ({sp.status})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Description (rich text) */}
-        <div className="space-y-1.5">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Description</label>
-          <DescriptionEditor content={description} onChange={setDescription} />
-        </div>
-
-        {/* Status + Priority row */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-            >
-              {columns.map((col) => (
-                <option key={col.id} value={col.id}>{col.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Priority</label>
-            <div className="flex flex-wrap gap-1">
-              {PRIORITIES.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setPriority(p.value)}
-                  className={`px-2.5 py-1 rounded-lg border font-inter text-xs font-semibold transition-all ${
-                    priority === p.value ? `${p.bg} ${p.color}` : 'border-outline-variant text-on-surface-variant hover:border-outline'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Story points */}
-        <div className="space-y-1.5">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
-            Effort Points <span className="normal-case text-outline/60 font-normal">(1=trivial → 13=very large)</span>
-          </label>
-          <div className="flex gap-1.5">
-            {STORY_POINTS.map((pt) => (
-              <button
-                key={pt}
-                type="button"
-                onClick={() => setStoryPoints(storyPoints === pt ? undefined : pt)}
-                className={`w-9 h-9 rounded-lg border font-inter font-bold text-sm transition-all ${
-                  storyPoints === pt
-                    ? 'bg-primary text-on-primary border-primary'
-                    : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
-                }`}
-              >
-                {pt}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Due Date */}
-        <div className="space-y-1">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Due Date</label>
+              {p.label}
+            </button>
+          ))}
+          <div className="w-px h-5 bg-outline-variant/40 self-center" />
           <DatePicker value={dueDate} onChange={setDueDate} placeholder="No due date" clearable />
         </div>
 
-        {/* Recurring */}
-        <div className="space-y-1">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Recurring</label>
-          <select
-            value={recurring}
-            onChange={(e) => setRecurring(e.target.value as RecurringFrequency | '')}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-          >
-            <option value="">Not recurring</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
+        {/* Description */}
+        <DescriptionEditor content={description} onChange={setDescription} />
 
-        {/* Start / Deadline time */}
-        {issueType !== 'subtask' && dueDate && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">schedule</span>
-                Start Time
-              </label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-              />
-              {startTime && (
-                <button onClick={() => setStartTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>
-              )}
-            </div>
-            <div className="space-y-1">
-              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">timer</span>
-                Deadline Time
-              </label>
-              <input
-                type="time"
-                value={deadlineTime}
-                onChange={(e) => setDeadlineTime(e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
-              />
-              {deadlineTime && (
-                <button onClick={() => setDeadlineTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>
-              )}
-            </div>
-          </div>
-        )}
-        {issueType !== 'subtask' && dueDate && (startTime || deadlineTime) && (
-          <p className="font-inter text-[10px] text-outline -mt-2">
-            <span className="material-symbols-outlined text-[11px] align-middle">notifications</span>
-            {' '}You'll be notified 1 hour and 30 minutes before each time.
-          </p>
-        )}
+        {/* Details toggle */}
+        <button
+          type="button"
+          onClick={() => setShowDetails((v) => !v)}
+          className="flex items-center gap-1.5 font-inter text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+        >
+          <span className={`material-symbols-outlined text-[14px] transition-transform ${showDetails ? 'rotate-90' : ''}`}>chevron_right</span>
+          Details
+          {hasDetails && !showDetails && (
+            <span className="ml-1 px-1.5 py-0.5 bg-primary/10 text-primary rounded-full text-[10px]">
+              {[sprintId, storyPoints, recurring, startTime || deadlineTime, tags.length > 0, linkedNoteIds.length > 0, selectedParentId].filter(Boolean).length} set
+            </span>
+          )}
+        </button>
 
-        {/* Linked Notes */}
-        <div className="space-y-1.5">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
-            <span className="material-symbols-outlined text-[13px]">sticky_note_2</span>
-            Linked Notes
-          </label>
-          {linkedNoteIds.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-1.5">
-              {linkedNoteIds.map((nid) => {
-                const n = notes.find((x) => x.id === nid);
-                return n ? (
-                  <div key={nid} className="flex items-center gap-1 bg-primary/10 text-primary rounded-full px-2.5 py-1 font-inter text-xs">
-                    <span>{n.title || 'Untitled'}</span>
-                    <button onClick={() => setLinkedNoteIds((ids) => ids.filter((id) => id !== nid))} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+        {showDetails && (
+          <div className="space-y-4 border-t border-outline-variant/20 pt-4">
+
+            {/* Status */}
+            <div className="space-y-1">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+              >
+                {columns.map((col) => (
+                  <option key={col.id} value={col.id}>{col.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Parent */}
+            {parentOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
+                  Parent {issueType === 'story' ? 'Epic' : issueType === 'subtask' ? 'Task / Story' : 'Epic / Story'}
+                </label>
+                <select
+                  value={selectedParentId ?? ''}
+                  onChange={(e) => setSelectedParentId(e.target.value || null)}
+                  className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+                >
+                  <option value="">— No parent —</option>
+                  {parentOptions.map((p) => (
+                    <option key={p.id} value={p.id}>[{p.issueType.toUpperCase()}] {p.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Sprint */}
+            {sprints.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Sprint</label>
+                <select
+                  value={sprintId ?? ''}
+                  onChange={(e) => setSprintId(e.target.value || null)}
+                  className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+                >
+                  <option value="">— No sprint —</option>
+                  {sprints.map((sp) => (
+                    <option key={sp.id} value={sp.id}>{sp.name} ({sp.status})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Story points */}
+            <div className="space-y-1.5">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">
+                Effort <span className="normal-case text-outline/60 font-normal">(1=trivial → 13=large)</span>
+              </label>
+              <div className="flex gap-1.5">
+                {STORY_POINTS.map((pt) => (
+                  <button
+                    key={pt}
+                    type="button"
+                    onClick={() => setStoryPoints(storyPoints === pt ? undefined : pt)}
+                    className={`w-9 h-9 rounded-lg border font-inter font-bold text-sm transition-all ${
+                      storyPoints === pt ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+                    }`}
+                  >
+                    {pt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Recurring */}
+            <div className="space-y-1">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Recurring</label>
+              <select
+                value={recurring}
+                onChange={(e) => setRecurring(e.target.value as RecurringFrequency | '')}
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40"
+              >
+                <option value="">Not recurring</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            {/* Start / Deadline time */}
+            {issueType !== 'subtask' && dueDate && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">schedule</span>Start Time
+                  </label>
+                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40" />
+                  {startTime && <button onClick={() => setStartTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>}
+                </div>
+                <div className="space-y-1">
+                  <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">timer</span>Deadline Time
+                  </label>
+                  <input type="time" value={deadlineTime} onChange={(e) => setDeadlineTime(e.target.value)}
+                    className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40" />
+                  {deadlineTime && <button onClick={() => setDeadlineTime('')} className="font-inter text-[10px] text-outline hover:text-error">clear</button>}
+                </div>
+              </div>
+            )}
+            {/* Notification reminders card */}
+            {issueType !== 'subtask' && dueDate && (startTime || deadlineTime) && (
+              <div className="rounded-2xl overflow-hidden border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-secondary/5">
+                <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-primary/10">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[16px] text-primary">notifications_active</span>
                   </div>
-                ) : null;
-              })}
-            </div>
-          )}
-          <input
-            type="text"
-            value={noteSearch}
-            onChange={(e) => setNoteSearch(e.target.value)}
-            placeholder="Search notes to link..."
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40 placeholder:text-outline/50"
-          />
-          {noteSearch && filteredNotes.length > 0 && (
-            <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
-              {filteredNotes.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => { setLinkedNoteIds((ids) => [...ids, n.id]); setNoteSearch(''); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-container text-left transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[14px] text-outline">sticky_note_2</span>
-                  <span className="font-inter text-sm text-on-surface truncate">{n.title || 'Untitled Note'}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {noteSearch && filteredNotes.length === 0 && (
-            <p className="font-inter text-xs text-outline px-1">No matching notes</p>
-          )}
-        </div>
+                  <div className="flex-1">
+                    <p className="font-inter font-semibold text-sm text-on-surface leading-none">Reminders</p>
+                    <p className="font-inter text-[10px] text-outline mt-0.5">
+                      {notifOffsets.length === 0 ? 'No reminders set' : `${notifOffsets.length} reminder${notifOffsets.length > 1 ? 's' : ''} before each time`}
+                    </p>
+                  </div>
+                </div>
+                <div className="px-4 py-3 space-y-2">
+                  <p className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Notify me before</p>
+                  <div className="flex gap-2">
+                    {(['2h', '1h', '30min'] as const).map((offset) => {
+                      const active = notifOffsets.includes(offset);
+                      const label = offset === '30min' ? '30 min' : offset;
+                      return (
+                        <button
+                          key={offset}
+                          type="button"
+                          onClick={() => setNotifOffsets(prev =>
+                            active ? prev.filter(o => o !== offset) : [...prev, offset]
+                          )}
+                          className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border font-inter font-semibold text-xs transition-all ${
+                            active
+                              ? 'bg-primary text-on-primary border-primary shadow-sm'
+                              : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'
+                          }`}
+                        >
+                          <span className={`material-symbols-outlined text-[18px] ${active ? 'text-on-primary' : 'text-outline'}`}>
+                            {offset === '2h' ? 'schedule' : offset === '1h' ? 'timer' : 'alarm'}
+                          </span>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-1 flex-wrap mt-1">
+                    {startTime && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 font-inter text-[10px] text-primary">
+                        <span className="material-symbols-outlined text-[11px]">schedule</span>
+                        Start {startTime}
+                      </span>
+                    )}
+                    {deadlineTime && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/10 font-inter text-[10px] text-secondary">
+                        <span className="material-symbols-outlined text-[11px]">timer</span>
+                        Deadline {deadlineTime}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
-        {/* Tags */}
-        <div className="space-y-1.5">
-          <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Tags</label>
-          <div className="flex flex-wrap gap-1.5 items-center min-h-[32px] bg-surface-container rounded-lg px-3 py-2">
-            {tags.map((tag) => (
-              <TagChip key={tag} tag={tag} onRemove={() => setTags(tags.filter((t) => t !== tag))} size="sm" />
-            ))}
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleTagKey}
-              onBlur={addTag}
-              placeholder={tags.length ? '' : 'Add tag...'}
-              className="bg-transparent border-none outline-none font-inter text-xs text-on-surface placeholder:text-outline/50 flex-1 min-w-[80px]"
-            />
-          </div>
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); setTags([...tags, s]); }}
-                  className="px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant font-inter text-xs text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors"
-                >
-                  + {s}
-                </button>
-              ))}
+            {/* Tags */}
+            <div className="space-y-1.5">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Tags</label>
+              <div className="flex flex-wrap gap-1.5 items-center min-h-[32px] bg-surface-container rounded-lg px-3 py-2">
+                {tags.map((tag) => (
+                  <TagChip key={tag} tag={tag} onRemove={() => setTags(tags.filter((t) => t !== tag))} size="sm" />
+                ))}
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKey}
+                  onBlur={addTag}
+                  placeholder={tags.length ? '' : 'Add tag...'}
+                  className="bg-transparent border-none outline-none font-inter text-xs text-on-surface placeholder:text-outline/50 flex-1 min-w-[80px]"
+                />
+              </div>
+              {suggestions.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((s) => (
+                    <button key={s} type="button" onMouseDown={(e) => { e.preventDefault(); setTags([...tags, s]); }}
+                      className="px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant font-inter text-xs text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors">
+                      + {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* Linked Notes */}
+            <div className="space-y-1.5">
+              <label className="font-inter text-xs font-semibold uppercase tracking-wider text-outline flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">sticky_note_2</span>Linked Notes
+              </label>
+              {linkedNoteIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {linkedNoteIds.map((nid) => {
+                    const n = notes.find((x) => x.id === nid);
+                    return n ? (
+                      <div key={nid} className="flex items-center gap-1 bg-primary/10 text-primary rounded-full px-2.5 py-1 font-inter text-xs">
+                        <span>{n.title || 'Untitled'}</span>
+                        <button onClick={() => setLinkedNoteIds((ids) => ids.filter((id) => id !== nid))} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              )}
+              <input type="text" value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)}
+                placeholder="Search notes to link..."
+                className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40 placeholder:text-outline/50" />
+              {noteSearch && filteredNotes.length > 0 && (
+                <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+                  {filteredNotes.map((n) => (
+                    <button key={n.id} type="button"
+                      onClick={() => { setLinkedNoteIds((ids) => [...ids, n.id]); setNoteSearch(''); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-container text-left transition-colors">
+                      <span className="material-symbols-outlined text-[14px] text-outline">sticky_note_2</span>
+                      <span className="font-inter text-sm text-on-surface truncate">{n.title || 'Untitled Note'}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {noteSearch && filteredNotes.length === 0 && (
+                <p className="font-inter text-xs text-outline px-1">No matching notes</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-2 border-t border-outline-variant/10">
+          {task && (
+            <button
+              onClick={() => { handleSave(); openFocus(task.id, title.trim() || task.title); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-secondary/10 text-secondary font-inter font-medium text-sm hover:bg-secondary/20 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">center_focus_strong</span>
+              Focus
+            </button>
+          )}
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter font-medium text-sm hover:bg-surface-container transition-colors">
             Cancel
           </button>
