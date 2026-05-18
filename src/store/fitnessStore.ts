@@ -82,7 +82,7 @@ interface FitnessState {
 
 export const useFitnessStore = create<FitnessState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       gymSessions: INITIAL_GYM,
       sportSessions: INITIAL_SPORTS,
 

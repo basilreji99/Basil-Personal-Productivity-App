@@ -39,6 +39,8 @@ import { markLocalDirty, setSuppressDirtyMark, clearLocalDirty } from './service
 import { useSprintStore } from './store/sprintStore';
 import { useTimerStore } from './store/timerStore';
 import { runHCSync } from './services/hcSync';
+import { scheduleHabitReminders } from './services/habitNotifications';
+import { setupNotificationChannels } from './services/notificationSetup';
 import WeeklyDigest from './pages/WeeklyDigest';
 import YearlyReview from './pages/YearlyReview';
 import Goals from './pages/Goals';
@@ -81,8 +83,8 @@ function OAuthHandler() {
   }
 
   async function handleGoogleCode(code: string) {
-    const verifier = localStorage.getItem('google_pkce_verifier');
-    localStorage.removeItem('google_pkce_verifier');
+    const verifier = sessionStorage.getItem('google_pkce_verifier');
+    sessionStorage.removeItem('google_pkce_verifier');
     if (!verifier) {
       navigate('/calendar');
       return;
@@ -309,8 +311,39 @@ function OAuthHandler() {
     useGoalsStore.persist.rehydrate();
     useTimerStore.persist.rehydrate();
     // Allow dirty marking again after stores have settled
-    setTimeout(() => setSuppressDirtyMark(false), 1000);
+    const timer = setTimeout(() => setSuppressDirtyMark(false), 1000);
+    return () => clearTimeout(timer);
   }, [needsReload, clearNeedsReload]);
+
+  // Set up notification channels once on startup, then schedule habit reminders
+  useEffect(() => {
+    setupNotificationChannels();
+
+    function scheduleHabits() {
+      const { habits, isCompleted, getWeekCompletionCount, getMonthCompletionCount } =
+        useHabitsStore.getState();
+      scheduleHabitReminders(habits, { isCompleted, getWeekCompletionCount, getMonthCompletionCount });
+    }
+
+    scheduleHabits();
+
+    // Re-schedule at midnight so tomorrow's reminders are set up
+    const now = new Date();
+    const msUntilMidnight =
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const midnightTimer = setTimeout(() => scheduleHabits(), msUntilMidnight);
+
+    // Re-schedule whenever the habits list changes (new habits, archive, reminderTime change)
+    const unsub = useHabitsStore.subscribe((s, prev) => {
+      if (s.habits !== prev.habits) scheduleHabits();
+    });
+
+    return () => {
+      clearTimeout(midnightTimer);
+      unsub();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }

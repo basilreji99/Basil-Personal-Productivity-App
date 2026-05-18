@@ -301,12 +301,20 @@ export const useHabitsStore = create<HabitsState>()(
           return streak;
         }
 
-        // Daily / weekdays streak — count consecutive days going back from today
+        // Daily / weekdays streak — count consecutive days going back from today.
+        // If today isn't done yet, check from yesterday so an active streak isn't
+        // shown as broken just because the habit hasn't been logged yet today.
         let streak = 0;
         const cursor = new Date();
-        for (let i = 0; i < 365; i++) {
+        for (let i = 0; i < 366; i++) {
           const dateStr = formatDate(cursor);
-          if (!get().isCompleted(habitId, dateStr)) break;
+          if (!get().isCompleted(habitId, dateStr)) {
+            if (i === 0) {
+              cursor.setDate(cursor.getDate() - 1);
+              continue;
+            }
+            break;
+          }
           streak++;
           cursor.setDate(cursor.getDate() - 1);
         }

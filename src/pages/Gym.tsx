@@ -4,7 +4,7 @@ import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useGymStore } from '../store/gymStore';
 import { useFitnessStore } from '../store/fitnessStore';
-import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS } from '../data/exercises';
+import { MUSCLE_GROUP_LABELS, EQUIPMENT_LABELS } from '../data/exercises'; // used in ExerciseCard
 import { hcExerciseTypeName } from '../services/healthConnect';
 import type {
   GymExercise,
@@ -12,7 +12,6 @@ import type {
   GymSet,
   GymSession,
   WorkoutTemplate,
-  MuscleGroup,
 } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,80 +33,66 @@ function fmtVolume(v: number) {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${v}kg`;
 }
 
-// ─── Exercise Picker Modal ────────────────────────────────────────────────────
+// ─── Add Exercise Modal ───────────────────────────────────────────────────────
 
-function ExercisePicker({
-  open, onClose, onPick, allExercises,
+function AddExerciseModal({
+  open, onClose, onAdd, allExercises,
 }: {
   open: boolean;
   onClose: () => void;
-  onPick: (id: string) => void;
+  onAdd: (name: string) => void;
   allExercises: GymExercise[];
 }) {
-  const [search, setSearch] = useState('');
-  const [filterGroup, setFilterGroup] = useState<MuscleGroup | 'all'>('all');
+  const [name, setName] = useState('');
 
-  const filtered = useMemo(() => {
-    return allExercises.filter((e) => {
-      const matchGroup = filterGroup === 'all' || e.muscleGroup === filterGroup;
-      const matchSearch = e.name.toLowerCase().includes(search.toLowerCase());
-      return matchGroup && matchSearch;
-    });
-  }, [allExercises, search, filterGroup]);
+  const suggestions = useMemo(() => {
+    if (!name.trim()) return [];
+    return allExercises
+      .filter((e) => e.name.toLowerCase().includes(name.toLowerCase()))
+      .slice(0, 6);
+  }, [allExercises, name]);
 
-  const groups: Array<MuscleGroup | 'all'> = [
-    'all', 'chest', 'back', 'shoulders', 'biceps', 'triceps',
-    'core', 'quads', 'hamstrings', 'glutes', 'calves', 'full_body', 'cardio',
-  ];
+  function submit(n: string) {
+    const trimmed = n.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setName('');
+    onClose();
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title="Choose Exercise" size="sm">
-      <div className="flex flex-col max-h-[70vh]">
-        <div className="px-4 pb-3 space-y-2 shrink-0">
-          <input
-            type="text"
-            placeholder="Search exercises…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/50"
-          />
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-            {groups.map((g) => (
+    <Modal open={open} onClose={() => { setName(''); onClose(); }} title="Add Exercise" size="sm">
+      <div className="p-4 space-y-3">
+        <input
+          autoFocus
+          type="text"
+          placeholder="Exercise name…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit(name)}
+          className="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2.5 font-inter text-sm text-on-surface outline-none focus:border-primary/50"
+        />
+        {suggestions.length > 0 && (
+          <div className="space-y-1">
+            {suggestions.map((ex) => (
               <button
-                key={g}
-                onClick={() => setFilterGroup(g)}
-                className={`shrink-0 px-3 py-1 rounded-full font-inter text-xs font-medium transition-colors ${
-                  filterGroup === g
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-surface-container text-on-surface-variant'
-                }`}
+                key={ex.id}
+                onClick={() => submit(ex.name)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-left transition-colors"
               >
-                {g === 'all' ? 'All' : MUSCLE_GROUP_LABELS[g as MuscleGroup]}
+                <span className="material-symbols-outlined text-[16px] text-on-surface-variant">fitness_center</span>
+                <span className="font-inter text-sm text-on-surface">{ex.name}</span>
               </button>
             ))}
           </div>
-        </div>
-        <div className="overflow-y-auto flex-1 divide-y divide-outline-variant/10">
-          {filtered.map((ex) => (
-            <button
-              key={ex.id}
-              onClick={() => { onPick(ex.id); onClose(); }}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container text-left"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-inter font-semibold text-sm text-on-surface">{ex.name}</p>
-                <p className="font-inter text-[10px] text-outline">
-                  {MUSCLE_GROUP_LABELS[ex.muscleGroup]} · {EQUIPMENT_LABELS[ex.equipment]}
-                  {ex.isCustom ? ' · Custom' : ''}
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-[18px] text-on-surface-variant">add</span>
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="font-inter text-sm text-outline text-center py-8">No exercises found</p>
-          )}
-        </div>
+        )}
+        <button
+          onClick={() => submit(name)}
+          disabled={!name.trim()}
+          className="w-full py-2.5 bg-primary text-on-primary rounded-xl font-inter font-semibold text-sm disabled:opacity-40"
+        >
+          Add Exercise
+        </button>
       </div>
     </Modal>
   );
@@ -181,7 +166,7 @@ function ExerciseCard({
           <p className="font-inter font-semibold text-sm text-on-surface">
             {exercise?.name ?? 'Unknown Exercise'}
           </p>
-          {exercise && (
+          {exercise && !exercise.isCustom && (
             <p className="font-inter text-[10px] text-outline">
               {MUSCLE_GROUP_LABELS[exercise.muscleGroup]} · {EQUIPMENT_LABELS[exercise.equipment]}
             </p>
@@ -233,9 +218,22 @@ function ActiveSessionOverlay({
     addExerciseToSession, removeExerciseFromSession,
     addSet, updateSet, deleteSet,
     updateSessionName, finishSession, cancelSession,
+    addCustomExercise,
   } = useGymStore();
 
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  function handleAddExercise(name: string) {
+    const existing = allExercises.find((e) => e.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      addExerciseToSession(existing.id);
+    } else {
+      addCustomExercise({ name, muscleGroup: 'other', equipment: 'bodyweight' });
+      const created = useGymStore.getState().getAllExercises()
+        .find((e) => e.name === name && e.isCustom);
+      if (created) addExerciseToSession(created.id);
+    }
+  }
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
@@ -316,10 +314,10 @@ function ActiveSessionOverlay({
         </button>
       </div>
 
-      <ExercisePicker
+      <AddExerciseModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onPick={(id) => addExerciseToSession(id)}
+        onAdd={handleAddExercise}
         allExercises={allExercises}
       />
 

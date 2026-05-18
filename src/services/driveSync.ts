@@ -64,7 +64,9 @@ export async function uploadBackup(token: string): Promise<number | null> {
     const backup: DriveBackup = { _syncedAt: ts };
     for (const key of STORE_KEYS) {
       const raw = localStorage.getItem(key);
-      if (raw) backup[key] = JSON.parse(raw);
+      if (raw) {
+        try { backup[key] = JSON.parse(raw); } catch { /* skip corrupted key */ }
+      }
     }
 
     const fileId = await findFileId(token);

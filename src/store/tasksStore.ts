@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Task, TaskColumn, TaskEvent, TaskPriority, IssueType, Recurring } from '../types';
+import type { Task, TaskColumn, TaskEvent, TaskPriority, IssueType } from '../types';
 import { nanoid } from '../utils/nanoid';
 import { useSprintStore } from './sprintStore';
+import { scheduleTaskNotifications, cancelTaskNotifications } from '../services/taskNotifications';
 
 const DEFAULT_COLUMNS: TaskColumn[] = [
   { id: 'backlog', name: 'Backlog', color: '#9e9e9e', order: 0 },
@@ -121,15 +122,15 @@ export const useTasksStore = create<TasksState>()(
           updatedAt: new Date().toISOString(),
         };
         set((s) => ({ tasks: [...s.tasks, task] }));
+        scheduleTaskNotifications(task);
         return task;
       },
 
-      updateTask: (id, updates) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) => {
+      updateTask: (id, updates) => {
+        set((s) => {
+          const updatedTasks = s.tasks.map((t) => {
             if (t.id !== id) return t;
             const updated = { ...t, ...updates, updatedAt: new Date().toISOString() };
-            // Auto-set / clear completedAt when status transitions to or from 'done'
             if ('status' in updates) {
               if (updates.status === 'done' && t.status !== 'done') {
                 updated.completedAt = new Date().toISOString();
@@ -137,7 +138,6 @@ export const useTasksStore = create<TasksState>()(
                 updated.completedAt = undefined;
               }
             }
-            // Re-evaluate sprint assignment when due date changes
             if ('dueDate' in updates && updated.sprintId) {
               const { sprints } = useSprintStore.getState();
               const sprint = sprints.find((sp) => sp.id === updated.sprintId);
@@ -159,21 +159,36 @@ export const useTasksStore = create<TasksState>()(
               }
             }
             return updated;
-          }),
-        })),
+          });
+
+          // When parent's sprint changes, cascade to all its subtasks
+          const original = s.tasks.find((t) => t.id === id);
+          const changed = updatedTasks.find((t) => t.id === id);
+          if (original && changed && original.sprintId !== changed.sprintId) {
+            return {
+              tasks: updatedTasks.map((t) =>
+                t.parentId === id ? { ...t, sprintId: changed.sprintId ?? null } : t,
+              ),
+            };
+          }
+          return { tasks: updatedTasks };
+        });
+
+        const notifRelevant = ['dueDate', 'startTime', 'deadlineTime', 'notificationOffsets', 'title'];
+        if (notifRelevant.some((k) => k in updates)) {
+          const task = get().tasks.find((t) => t.id === id);
+          if (task) scheduleTaskNotifications(task);
+        }
+      },
 
       deleteTask: (id) => {
         const getAllDescendantIds = (taskId: string, tasks: Task[]): string[] => {
           const children = tasks.filter((t) => t.parentId === taskId);
-          return [
-            taskId,
-            ...children.flatMap((c) => getAllDescendantIds(c.id, tasks)),
-          ];
+          return [taskId, ...children.flatMap((c) => getAllDescendantIds(c.id, tasks))];
         };
-        set((s) => {
-          const idsToDelete = getAllDescendantIds(id, s.tasks);
-          return { tasks: s.tasks.filter((t) => !idsToDelete.includes(t.id)) };
-        });
+        const idsToDelete = getAllDescendantIds(id, get().tasks);
+        set((s) => ({ tasks: s.tasks.filter((t) => !idsToDelete.includes(t.id)) }));
+        idsToDelete.forEach((tid) => cancelTaskNotifications(tid));
       },
 
       moveTask: (taskId, newStatus) =>
@@ -316,6 +331,8 @@ export const useTasksStore = create<TasksState>()(
             .map((t) => t.id === taskId ? { ...t, status: 'done', completedAt: now, updatedAt: now } : t)
             .concat([newTask]),
         }));
+        cancelTaskNotifications(taskId);
+        scheduleTaskNotifications(newTask);
       },
 
       allTags: () => {

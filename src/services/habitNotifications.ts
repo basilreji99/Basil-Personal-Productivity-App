@@ -13,8 +13,11 @@ export async function scheduleHabitReminders(
   fns: CheckFns,
 ): Promise<void> {
   try {
-    const perm = await LocalNotifications.requestPermissions();
-    if (perm.display !== 'granted') return;
+    let { display } = await LocalNotifications.checkPermissions();
+    if (display !== 'granted') {
+      ({ display } = await LocalNotifications.requestPermissions());
+    }
+    if (display !== 'granted') return;
 
     // Cancel all previously scheduled habit reminders (IDs 9000–9200)
     const pending = await LocalNotifications.getPending();
@@ -57,6 +60,7 @@ export async function scheduleHabitReminders(
         title: `${h.name} reminder`,
         body: h.description || `Time to complete your habit!`,
         schedule: { at },
+        channelId: 'habits',
         smallIcon: 'ic_stat_icon_config_sample',
       });
     });
@@ -78,7 +82,8 @@ export async function scheduleHabitReminders(
           title: '🔥 Don\'t break your streak!',
           body: `${pendingDaily.length} daily habit${pendingDaily.length > 1 ? 's' : ''} left today: ${pendingDaily.map(h => h.name).join(', ')}`,
           schedule: { at },
-          smallIcon: 'ic_stat_icon_config_sample',
+          channelId: 'habits',
+        smallIcon: 'ic_stat_icon_config_sample',
         });
       }
     }
@@ -99,7 +104,8 @@ export async function scheduleHabitReminders(
           title: '📅 Week ending soon!',
           body: pendingWeekly.map(h => `${h.name} (${fns.getWeekCompletionCount(h.id, weekStart)}/${h.targetDays})`).join(', '),
           schedule: { at: sunday },
-          smallIcon: 'ic_stat_icon_config_sample',
+          channelId: 'habits',
+        smallIcon: 'ic_stat_icon_config_sample',
         });
       }
     }
@@ -118,7 +124,8 @@ export async function scheduleHabitReminders(
           title: '📆 Last chance this month!',
           body: `Still to do: ${pendingMonthly.map(h => h.name).join(', ')}`,
           schedule: { at: lastDay },
-          smallIcon: 'ic_stat_icon_config_sample',
+          channelId: 'habits',
+        smallIcon: 'ic_stat_icon_config_sample',
         });
       }
     }

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { TimerMode, TimerSession } from '../types';
 import { nanoid } from '../utils/nanoid';
+import { fireTimerCompletionNotification } from '../services/timerNotifications';
 
 const DURATIONS: Record<TimerMode, number> = {
   work: 25 * 60,
@@ -58,7 +59,7 @@ export const useTimerStore = create<TimerState>()(
         })),
 
       tick: () => {
-        const { timeLeft, mode, pomodoroCount } = get();
+        const { timeLeft, mode, pomodoroCount, currentTaskTitle } = get();
         if (timeLeft <= 0) {
           get().recordSession();
           const newCount = mode === 'work' ? pomodoroCount + 1 : pomodoroCount;
@@ -74,6 +75,7 @@ export const useTimerStore = create<TimerState>()(
             mode: nextMode,
             timeLeft: get().customDurations[nextMode],
           });
+          fireTimerCompletionNotification(mode, newCount, currentTaskTitle ?? null);
           return;
         }
         set({ timeLeft: timeLeft - 1 });

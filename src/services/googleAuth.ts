@@ -54,7 +54,7 @@ export async function generateCodeChallenge(verifier: string): Promise<string> {
 
 export async function buildAuthCodeUrl(clientId: string): Promise<string> {
   const verifier = generateCodeVerifier();
-  localStorage.setItem('google_pkce_verifier', verifier);
+  sessionStorage.setItem('google_pkce_verifier', verifier);
   const challenge = await generateCodeChallenge(verifier);
   const redirectUri = getOAuthRedirectUri();
   const params = new URLSearchParams({
