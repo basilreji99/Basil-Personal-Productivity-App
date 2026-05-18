@@ -1,17 +1,35 @@
-# Basil Daily (Personal Development App)
+# Basil Daily — Personal Productivity App
 
-A personal productivity app built with React + Capacitor that runs on both the web and Android. All data stays in your browser's `localStorage` and syncs across devices via your own Google Drive — no backend, no subscription, no data sent to third-party servers.
+A personal productivity app built with React + Capacitor that runs on both the web and Android. All data lives in your browser's `localStorage` and syncs across devices via your own Google Drive — no backend, no subscription, no data sent to third-party servers.
 
 ## Features
 
-- **Tasks:** Epics → Stories → Tasks → Subtasks (Jira-style backlog + board). Sprint planning, drag-to-reorder, progress bars, due-date badges.
-- **Notes:** Rich-text notes with checklists, tags, and pinning.
-- **Finance:** Income/expense tracking with categories and recurring transactions.
-- **Habits:** Daily/weekly habit streaks.
-- **Calendar:** Google Calendar integration + task due dates on the grid.
-- **Health:** Body measurement tracker.
-- **Hobbies:** Movie/series log, music (Spotify), drawing portfolio (images stored in Google Drive), fitness log.
-- **Cross-device sync:** Backup/restore via Google Drive `appDataFolder`. Pull-to-refresh on mobile.
+**Productivity**
+- **Tasks:** Epics → Stories → Tasks → Subtasks (Jira-style backlog + board). Sprint planning, drag-to-reorder, recurring tasks, progress bars, due-date badges.
+- **Notes:** Rich-text notes (Tiptap) with checklists, tags, folders, pinning, and masonry layout.
+- **Habits:** Daily/weekly/monthly habit tracking with streaks, heatmap, and source-linked habits (auto-marked by gym/sports sessions).
+- **Finance:** Income/expense tracking with categories, charts (Recharts), and month navigator.
+- **Goals:** OKR-style goal tracking with key results and auto-completion detection.
+- **Sprints:** Full sprint board with kanban, rollover, and auto-activation by date range.
+- **Pomodoro Timer:** Focus sessions linked to tasks, with session history.
+
+**Health & Fitness**
+- **Gym:** Active workout tracker with built-in + custom exercises, sets/reps/weight logging.
+- **Sports & Fitness:** Sport session log (running, swimming, cycling, etc.) with duration and calories.
+- **Health:** Body measurement tracker (weight, body fat, muscle mass, BMI, and more).
+- **Health Connect (Android):** Auto-imports steps, sleep, and workout sessions from Health Connect.
+
+**Lifestyle**
+- **Calendar:** Google Calendar integration (multi-account), local events, month grid + agenda view, task due dates on the grid.
+- **Hobbies:** Movie/series log, Spotify music tracking, drawing portfolio (images stored in Google Drive), books log, travel log.
+- **Weekly Digest:** Automated summary of habits, tasks, and fitness for the past week.
+- **Yearly Review:** Annual reflection and review page.
+
+**Sync & Infrastructure**
+- **Cross-device sync:** Backup/restore via Google Drive `appDataFolder`. Pull-to-refresh on mobile, tab-switch sync on web, 30s periodic push.
+- **Offline support:** Offline banner, queued sync on reconnect.
+- **Dark mode:** System-aware with manual override.
+- **Onboarding:** First-launch walkthrough.
 
 ---
 
@@ -26,156 +44,154 @@ A personal productivity app built with React + Capacitor that runs on both the w
 
 ---
 
-## 1. Clone the repo
+## 1. Clone and install
 
 ```bash
-git clone <your-repo-url>
-cd "notes app/app"
+git clone https://github.com/basilreji99/Basil-Personal-Productivity-App
+cd "Basil-Personal-Productivity-App"
 npm install
 ```
 
 ---
 
-## 2. Set up Spotify (optional — Music tab)
+## 2. Environment variables
 
-> Skip this if you don't need the Music / Spotify feature.
-
-1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and create an app.
-2. In your app settings add the following **Redirect URI**:
-   - Web: `http://localhost:5173/spotify-callback` (dev) and your production URL
-   - Android: `basilapp://spotify-callback`
-3. Copy the **Client ID**.
-4. Create `app/.env` from the example:
-
-```bash
-cp .env.example .env
-```
-
-5. Paste your Client ID into `.env`:
+Create a `.env` file in the project root:
 
 ```
-VITE_SPOTIFY_CLIENT_ID=your_client_id_here
+VITE_SPOTIFY_CLIENT_ID=your_spotify_client_id
+
+VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_SECRET=your_google_client_secret
+VITE_GOOGLE_OAUTH_RELAY_URL=https://your-github-username.github.io/oauth-relay/
 ```
+
+See sections 3 and 4 below for how to get these values.
 
 ---
 
 ## 3. Set up Google APIs (sync + calendar)
 
-This app uses two Google APIs, both accessed with a single OAuth 2.0 Client ID that **you own** — your data never touches any third-party server.
+### 3a. Google Cloud project
 
-### 3a. Create a Google Cloud project
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com).
-2. Click **Select a project → New Project**. Give it any name.
-3. Enable the following APIs (**APIs & Services → Library**):
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → **New Project**.
+2. Enable these APIs under **APIs & Services → Library**:
    - **Google Drive API**
    - **Google Calendar API**
 
-### 3b. Configure the OAuth consent screen
+### 3b. OAuth consent screen
 
-1. Go to **APIs & Services → OAuth consent screen**.
-2. Choose **External**, click **Create**.
-3. Fill in the app name (anything), your email for support contact, and your email again for developer contact. Click **Save and Continue**.
-4. On the **Scopes** step, click **Add or Remove Scopes** and add:
+1. **APIs & Services → OAuth consent screen → External → Create**.
+2. Fill in app name and your email. Click **Save and Continue**.
+3. Add scopes:
    - `https://www.googleapis.com/auth/drive.appdata`
    - `https://www.googleapis.com/auth/calendar.readonly`
-5. Click **Save and Continue**.
-6. On the **Test users** step, click **Add Users** and add your own Google email. Click **Save and Continue**.
+4. Add your Google account as a **test user**. Save.
 
-### 3c. Create a Client ID
+### 3c. Create a Web application credential
 
-1. Go to **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**.
+1. **Credentials → Create Credentials → OAuth 2.0 Client ID**.
 2. Application type: **Web application**.
-3. Under **Authorised JavaScript origins** add:
-   - `http://localhost:5173` (for local dev)
-   - Your production domain if deploying to the web
-4. Under **Authorised redirect URIs** add:
-   - `http://localhost:5173/` (note the trailing slash)
-   - Your production URL if applicable
-5. Click **Create** and copy the **Client ID** (looks like `xxxxxxxx.apps.googleusercontent.com`).
+3. Under **Authorised redirect URIs** add:
+   - `http://localhost:5173/` (web dev)
+   - `https://your-github-username.github.io/oauth-relay/` (Android — see section 3d)
+4. Copy the **Client ID** and **Client Secret** into your `.env`.
 
-> The Client ID is **not a secret** — it is pasted in the app's UI at runtime (Settings / Calendar page → "Connect Google"), not in any config file.
+### 3d. Android OAuth relay (required for APK sign-in)
 
-### 3d. Android deep-link (if building the APK)
+Android can't receive an OAuth redirect directly on `http://localhost`, so a tiny GitHub Pages relay page bridges Google's HTTPS redirect back into the app.
 
-The Android app receives the OAuth token via a custom deep link (`basilapp://`). No extra Google Console step is needed for this — the redirect is handled by the Capacitor Browser plugin opening the system browser and redirecting back.
+1. Create a **public** GitHub repo named `oauth-relay`.
+2. Add one file `index.html` with this exact content:
+   ```html
+   <!doctype html><html><head><script>location.replace('basilapp://oauth2callback'+location.search)</script></head><body></body></html>
+   ```
+3. **Settings → Pages → Source → Deploy from branch → main / (root)** → Save.
+4. Once live, `https://your-github-username.github.io/oauth-relay/` will redirect to the app.
+5. Add that URL as a redirect URI in your Google credential (step 3c above).
+6. Set `VITE_GOOGLE_OAUTH_RELAY_URL` in your `.env` to that URL.
 
 ---
 
-## 4. Run on the web
+## 4. Set up Spotify (optional — Music tab)
+
+1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → create an app.
+2. Add redirect URIs:
+   - Web: `http://localhost:5173/spotify-callback`
+   - Android: `basilapp://spotify-callback`
+3. Copy the **Client ID** into `VITE_SPOTIFY_CLIENT_ID` in your `.env`.
+
+---
+
+## 5. Run on the web
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:5173`.
-
-To connect Google sync:
-1. Open the **Calendar** tab.
-2. Paste your OAuth Client ID and tap **Connect primary Google account**.
-3. Sign in with the Google account you added as a test user.
+Open `http://localhost:5173`. To connect Google sync, go to the **Calendar** tab, enter your credentials, and tap **Save & Sign In**.
 
 ---
 
-## 5. Build the Android APK
+## 6. Build the Android APK
 
 ```bash
-# 1. Build the web assets
+# Build web assets
 npm run build
 
-# 2. Copy web assets into the Android project
+# Sync into Android project
 npx cap sync
 
-# 3. Open Android Studio
+# Open in Android Studio
 npx cap open android
 ```
 
-Inside Android Studio:
-
+In Android Studio:
 1. **Build → Clean Project**
 2. **Build → Generate Signed Bundle / APK → APK**
-   - Create or choose a keystore (keep it safe — do not commit it).
 3. Install the APK on your device.
 
-### First launch on Android
-
-- Open the app, go to **Calendar**, paste your Client ID and tap **Connect Google**.
-- This stores the OAuth token in `localStorage`. If you reinstall the APK, localStorage is wiped and you must reconnect.
+**First launch on Android:** tap Sign In on the Calendar page. Chrome Custom Tab opens, you sign in with Google, and the relay page sends the token back to the app automatically. Sign-in persists — the refresh token is stored and renewed silently every hour.
 
 ---
 
-## 6. Cross-device sync explained
+## 7. Cross-device sync
 
 - All data lives in `localStorage` on each device.
-- When you connect Google, the app uploads a JSON backup to your Google Drive **appDataFolder** (a private, app-only folder invisible in Google Drive UI).
-- On startup, tab-switch, or pull-to-refresh, the app compares timestamps and merges the latest version.
-- No backend is involved. Only you can read the backup (it lives in your own Drive).
-
----
-
-## 7. Personalising the app name / package ID
-
-Edit `app/capacitor.config.ts`:
-
-```ts
-const config: CapacitorConfig = {
-  appId: 'com.yourname.yourapp',   // must be unique on your device
-  appName: 'Your App Name',
-  ...
-};
-```
-
-Then re-run `npx cap sync`.
+- On sign-in, the app uploads a JSON backup to your Google Drive **appDataFolder** (a private, app-only folder not visible in the Drive UI).
+- On startup, tab-switch, or pull-to-refresh (mobile), the app compares timestamps and pulls the latest version.
+- No backend. Only you can read the backup (it lives in your own Drive account).
 
 ---
 
 ## 8. Environment variables reference
 
-| Variable | Where to get it | Required |
-|----------|----------------|----------|
-| `VITE_SPOTIFY_CLIENT_ID` | [developer.spotify.com](https://developer.spotify.com/dashboard) | Only for Music tab |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `VITE_SPOTIFY_CLIENT_ID` | Spotify app Client ID | Music tab only |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth Web credential Client ID | Yes |
+| `VITE_GOOGLE_CLIENT_SECRET` | Google OAuth Web credential Client Secret | Yes |
+| `VITE_GOOGLE_OAUTH_RELAY_URL` | GitHub Pages relay URL for Android OAuth | Android only |
 
-The Google OAuth Client ID is **not** an environment variable — it is entered by the user at runtime inside the app.
+---
+
+## Project structure
+
+```
+├── src/
+│   ├── pages/           # Top-level pages (Dashboard, Today, Notes, Tasks, …)
+│   │   └── hobbies/     # Sub-pages (Movies, Music, Books, Fitness, Drawing, Travel)
+│   ├── components/
+│   │   ├── layout/      # AppShell, TopBar, BottomNav
+│   │   ├── calendar/    # MonthGrid, EventModal
+│   │   ├── tasks/       # TaskModal, BoardCard
+│   │   └── ui/          # Modal, DatePicker, ConfirmDialog, shared UI
+│   ├── store/           # Zustand stores (one per domain)
+│   ├── services/        # googleAuth, driveSync, calendarApi, spotifyAuth, hcSync, …
+│   └── utils/           # nanoid, dateUtils, sanitizeHtml, imageCache
+├── android/             # Capacitor Android project
+└── public/
+```
 
 ---
 
@@ -183,14 +199,14 @@ The Google OAuth Client ID is **not** an environment variable — it is entered 
 
 | Layer | Library |
 |-------|---------|
-| UI | React 19, Tailwind CSS 3 |
-| Routing | React Router 7 |
+| UI | React 18, Tailwind CSS 3 |
+| Routing | React Router 7 (HashRouter) |
 | State | Zustand 5 (persisted to localStorage) |
-| Rich text | Tiptap 3 |
+| Rich text | Tiptap |
 | Charts | Recharts |
 | Drag & drop | @dnd-kit |
 | Mobile | Capacitor 8 (Android) |
 | Sync | Google Drive API v3 (appDataFolder) |
 | Calendar | Google Calendar API v3 |
-| Music | Spotify Web API (PKCE flow) |
-
+| Music | Spotify Web API (PKCE) |
+| Health | Health Connect (Android, via Capacitor plugin) |

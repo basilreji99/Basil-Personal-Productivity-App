@@ -3,20 +3,27 @@
 Thumbs.db
 
 # Android build outputs (keep source, ignore compiled artefacts)
-app/android/app/build/
-app/android/build/
-app/android/.gradle/
-app/android/local.properties
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
 
 # Node / Vite
-app/node_modules/
-app/dist/
-app/dist-ssr/
+node_modules/
+dist/
+dist-ssr/
 
 # Environment secrets
-app/.env
-app/.env.local
-app/.env.*.local
+.env
+.env.local
+.env.*.local
+
+# Legacy app/ subdirectory (no longer used — anchored to root so android/app/ is unaffected)
+/app/
+
+# Personal data files
+data/
+public/paintings/
 
 # Editor
 .vscode/*
