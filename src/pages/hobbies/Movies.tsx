@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { localDateString } from '../../utils/dateUtils';
 import TopBar from '../../components/layout/TopBar';
 import Modal from '../../components/ui/Modal';
 import { useHobbyStore } from '../../store/hobbyStore';
@@ -242,7 +243,7 @@ function WatchlistModal({ open, onClose, item }: { open: boolean; onClose: () =>
 
   const handleSave = () => {
     if (markWatched && item) {
-      moveToReview(item.id, watchRating, '', 'watched', new Date().toISOString().slice(0, 10));
+      moveToReview(item.id, watchRating, '', 'watched', localDateString());
     } else if (item) {
       updateWatchlistItem(item.id, { title, type, reason, priority, genres });
     } else {

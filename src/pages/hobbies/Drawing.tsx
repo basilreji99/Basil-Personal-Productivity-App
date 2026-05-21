@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { localDateString } from '../../utils/dateUtils';
 import TopBar from '../../components/layout/TopBar';
 import Modal from '../../components/ui/Modal';
 import { useHobbyStore } from '../../store/hobbyStore';
@@ -74,7 +75,7 @@ function ArtworkModal({ open, onClose, artwork }: { open: boolean; onClose: () =
   const { addArtwork, updateArtwork, deleteArtwork } = useHobbyStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   const [title, setTitle]           = useState('');
   const [medium, setMedium]         = useState('');
   const [section, setSection]       = useState<Artwork['section'] | ''>('');

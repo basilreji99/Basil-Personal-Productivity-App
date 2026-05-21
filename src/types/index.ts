@@ -41,6 +41,13 @@ export interface Note {
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 
+export interface ProgressEntry {
+  id: string;
+  text: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low' | 'none';
 
 export type IssueType = 'epic' | 'story' | 'task' | 'bug' | 'subtask';
@@ -80,6 +87,7 @@ export interface Task {
   completedAt?: string;     // ISO string, auto-set when status transitions to 'done'
   recurring: Recurring | null;
   events: TaskEvent[];
+  progressLog?: ProgressEntry[];
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -207,11 +215,11 @@ export interface BodyMeasurement {
 }
 
 export interface HealthProfile {
-  height: number;           // cm
-  targetBodyFatMin: number; // %
-  targetBodyFatMax: number; // %
-  targetWeight?: number;    // kg
-  targetMuscleMass?: number; // kg
+  height: number | null;           // cm
+  targetBodyFatMin: number | null; // %
+  targetBodyFatMax: number | null; // %
+  targetWeight?: number | null;    // kg
+  targetMuscleMass?: number | null; // kg
 }
 
 // ─── Hobbies ─────────────────────────────────────────────────────────────────
@@ -377,4 +385,5 @@ export interface SearchResult {
   icon: string;
   color?: string;
   navigateTo: string;
+  navigateState?: Record<string, unknown>;
 }

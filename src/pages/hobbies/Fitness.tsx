@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { localDateString } from '../../utils/dateUtils';
 import TopBar from '../../components/layout/TopBar';
 import Modal from '../../components/ui/Modal';
 import DatePicker from '../../components/ui/DatePicker';
@@ -108,7 +109,7 @@ function SportLogModal({ open, onClose, session }: {
   open: boolean; onClose: () => void; session?: SportSession | null;
 }) {
   const { addSportSession, updateSportSession, deleteSportSession } = useFitnessStore();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
 
   const [date, setDate]          = useState(today);
   const [sport, setSport]        = useState('');

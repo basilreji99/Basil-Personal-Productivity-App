@@ -50,10 +50,11 @@ export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
         type: 'note' as const,
         id: n.id,
         title: n.title,
-        subtitle: n.content.slice(0, 60),
+        subtitle: n.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').slice(0, 60),
         icon: 'sticky_note_2',
         color: 'text-pink-500',
         navigateTo: '/notes',
+        navigateState: { openNoteId: n.id },
       })),
     ...tasks
       .filter((t) =>
@@ -121,7 +122,7 @@ export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
   ];
 
   const handleSelect = (result: SearchResult) => {
-    navigate(result.navigateTo);
+    navigate(result.navigateTo, result.navigateState ? { state: result.navigateState } : {});
     onClose();
   };
 

@@ -1,4 +1,5 @@
 import type { UnifiedEvent } from '../../store/calendarStore';
+import { localDateString } from '../../utils/dateUtils';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
@@ -25,7 +26,7 @@ export default function MonthGrid({
   year, month, eventsByDate, selectedDate,
   onSelectDate, onPrev, onNext, onToday,
 }: MonthGridProps) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateString();
   const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysInPrev = new Date(year, month, 0).getDate();

@@ -187,7 +187,10 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonr
               <span className="material-symbols-outlined text-[12px] text-primary icon-fill absolute top-2 right-2">push_pin</span>
             )}
             {note.title && (
-              <h3 className="font-inter font-semibold text-xs text-on-surface pr-3 line-clamp-2">{note.title}</h3>
+              <>
+                <h3 className="font-inter font-semibold text-xs text-on-surface pr-3 line-clamp-2">{note.title}</h3>
+                <hr className="border-t border-outline-variant/30 my-1.5" />
+              </>
             )}
             <div className="flex-1">
               <NoteContent note={note} clamp={4} />
@@ -244,7 +247,10 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonr
           )}
 
           {note.title && (
-            <h3 className="font-inter font-semibold text-sm text-on-surface mb-1 pr-5">{note.title}</h3>
+            <>
+              <h3 className="font-inter font-semibold text-sm text-on-surface mb-2 pr-5">{note.title}</h3>
+              <hr className="border-t border-outline-variant/30 mb-2" />
+            </>
           )}
 
           <NoteContent note={note} />

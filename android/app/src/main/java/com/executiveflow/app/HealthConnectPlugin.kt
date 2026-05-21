@@ -40,7 +40,8 @@ class HealthConnectPlugin : Plugin() {
 
     private var pendingPermissionCall: PluginCall? = null
 
-    private val PERMISSIONS = setOf(
+    // Permissions required for sync to function
+    private val SYNC_PERMISSIONS = setOf(
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(BodyFatRecord::class),
         HealthPermission.getReadPermission(BoneMassRecord::class),
@@ -49,6 +50,10 @@ class HealthConnectPlugin : Plugin() {
         HealthPermission.getReadPermission(HeightRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+    )
+
+    // Full set to request (includes optional data like calories, heart rate, steps)
+    private val PERMISSIONS = SYNC_PERMISSIONS + setOf(
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -86,8 +91,8 @@ class HealthConnectPlugin : Plugin() {
                     HealthConnectClient.getOrCreate(context)
                 }
                 val granted = client.permissionController.getGrantedPermissions()
-                val allGranted = PERMISSIONS.all { it in granted }
-                Log.d(TAG, "checkHCPermissions: allGranted=$allGranted")
+                val allGranted = SYNC_PERMISSIONS.all { it in granted }
+                Log.d(TAG, "checkHCPermissions: allGranted=$allGranted granted=${granted.size}/${PERMISSIONS.size}")
                 call.resolve(JSObject().apply { put("granted", allGranted) })
             } catch (t: Throwable) {
                 Log.e(TAG, "checkHCPermissions failed", t)
@@ -110,8 +115,14 @@ class HealthConnectPlugin : Plugin() {
             pendingPermissionCall = call
             call.setKeepAlive(true)
             activity.runOnUiThread {
-                @Suppress("DEPRECATION")
-                activity.startActivityForResult(intent, HC_REQUEST_CODE)
+                try {
+                    @Suppress("DEPRECATION")
+                    activity.startActivityForResult(intent, HC_REQUEST_CODE)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "startActivityForResult failed: ${t.message}", t)
+                    pendingPermissionCall = null
+                    call.resolve(JSObject().apply { put("granted", false); put("needsSetup", true) })
+                }
             }
         } catch (t: Throwable) {
             Log.e(TAG, "requestHCPermissions failed: ${t.message}", t)
@@ -129,7 +140,7 @@ class HealthConnectPlugin : Plugin() {
             try {
                 val client = withContext(Dispatchers.Main) { HealthConnectClient.getOrCreate(context) }
                 val granted = client.permissionController.getGrantedPermissions()
-                val allGranted = PERMISSIONS.all { it in granted }
+                val allGranted = SYNC_PERMISSIONS.all { it in granted }
                 Log.d(TAG, "handleOnActivityResult: allGranted=$allGranted")
                 call.resolve(JSObject().apply { put("granted", allGranted) })
             } catch (t: Throwable) {

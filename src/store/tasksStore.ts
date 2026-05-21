@@ -112,11 +112,16 @@ export const useTasksStore = create<TasksState>()(
           storyPoints: partial.storyPoints,
           tags: partial.tags ?? [],
           parentId: partial.parentId ?? null,
+          sprintId: partial.sprintId ?? null,
+          linkedNoteIds: partial.linkedNoteIds ?? [],
+          isStretchGoal: partial.isStretchGoal ?? false,
+          notificationOffsets: partial.notificationOffsets,
           dueDate: partial.dueDate ?? null,
           startTime: partial.startTime,
           deadlineTime: partial.deadlineTime,
           recurring: partial.recurring ?? null,
           events: partial.events ?? [],
+          progressLog: partial.progressLog ?? [],
           order: tasksInStatus.length,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -138,7 +143,7 @@ export const useTasksStore = create<TasksState>()(
                 updated.completedAt = undefined;
               }
             }
-            if ('dueDate' in updates && updated.sprintId) {
+            if ('dueDate' in updates && updates.dueDate && updated.sprintId) {
               const { sprints } = useSprintStore.getState();
               const sprint = sprints.find((sp) => sp.id === updated.sprintId);
               if (sprint) {
@@ -225,6 +230,9 @@ export const useTasksStore = create<TasksState>()(
           issueType: 'subtask',
           tags: [],
           parentId,
+          sprintId: parent?.sprintId ?? null,
+          linkedNoteIds: [],
+          isStretchGoal: false,
           dueDate: null,
           recurring: null,
           events: [],

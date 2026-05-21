@@ -17,6 +17,7 @@ interface FinanceState {
   };
   getTotalBalance: () => number;
   getRecentTransactions: (limit?: number) => Transaction[];
+  getTransactionsByMonth: (year: number, month: number) => Transaction[];
 }
 
 
@@ -86,6 +87,15 @@ export const useFinanceStore = create<FinanceState>()(
         return [...get().transactions]
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .slice(0, limit);
+      },
+
+      getTransactionsByMonth: (year, month) => {
+        return [...get().transactions]
+          .filter((t) => {
+            const d = new Date(t.date);
+            return d.getFullYear() === year && d.getMonth() + 1 === month;
+          })
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       },
     }),
     { name: 'productivity-finance' },

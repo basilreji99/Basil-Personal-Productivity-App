@@ -156,7 +156,7 @@ export default function AppShell() {
       {isOnline && !sessionExpired && syncStatus === 'error' && (
         <button
           onClick={() => syncNow()}
-          className="flex w-full items-center justify-center gap-2 bg-error/90 text-on-error px-4 py-1.5 text-xs font-inter font-medium z-50"
+          className="flex w-full items-center justify-center gap-2 bg-error-container text-on-error-container dark:bg-error-container/80 dark:text-on-error-container px-4 py-1.5 text-xs font-inter font-medium z-50"
         >
           <span className="material-symbols-outlined text-[14px]">sync_problem</span>
           Sync failed — tap to retry

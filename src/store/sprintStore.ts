@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Sprint, SprintStatus } from '../types';
 import { nanoid } from '../utils/nanoid';
+import { localDateString } from '../utils/dateUtils';
 import { useTasksStore } from './tasksStore';
 
 interface SprintState {
@@ -26,8 +27,8 @@ export const useSprintStore = create<SprintState>()(
           id: nanoid(),
           name: partial.name ?? 'New Sprint',
           goal: partial.goal,
-          startDate: partial.startDate ?? now.toISOString().slice(0, 10),
-          endDate: partial.endDate ?? twoWeeks.toISOString().slice(0, 10),
+          startDate: partial.startDate ?? localDateString(now),
+          endDate: partial.endDate ?? localDateString(twoWeeks),
           status: (partial.status as SprintStatus) ?? 'planned',
           capacity: partial.capacity,
           createdAt: now.toISOString(),
@@ -86,7 +87,7 @@ export const useSprintStore = create<SprintState>()(
         get().sprints.find((sp) => sp.status === 'active') ?? null,
 
       autoActivateSprints: () => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localDateString();
         set((s) => {
           // First: complete any active sprints that have ended
           const withCompleted = s.sprints.map((sp) =>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie } from 'recharts';
 import TopBar from '../components/layout/TopBar';
+import { useThemeStore } from '../store/themeStore';
 import AddTransactionModal from '../components/finance/AddTransactionModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useFinanceStore } from '../store/financeStore';
@@ -39,13 +40,18 @@ export default function Finance() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const { resolvedDark } = useThemeStore();
+  const isDark = resolvedDark();
+  const barColor = isDark ? 'rgb(180 197 255)' : 'rgb(0 74 198)';
+  const axisTickColor = isDark ? 'rgb(141 144 162)' : 'rgb(115 118 134)';
+  const tooltipBorder = isDark ? 'rgb(67 70 85)' : 'rgb(195 198 215)';
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'overview' | 'transactions'>('overview');
 
-  const { deleteTransaction, getMonthlyStats, getTotalBalance, getRecentTransactions } = useFinanceStore();
+  const { deleteTransaction, getMonthlyStats, getTotalBalance, getTransactionsByMonth } = useFinanceStore();
   const stats = getMonthlyStats(year, month);
-  const recent = getRecentTransactions(20);
+  const recent = getTransactionsByMonth(year, month);
   const totalBalance = getTotalBalance();
 
   const prevMonth = () => {
@@ -70,10 +76,10 @@ export default function Finance() {
 
       <main className="max-w-screen-xl mx-auto pb-4">
         {/* Hero balance */}
-        <div className="bg-primary px-4 py-6 text-center">
-          <p className="font-inter text-xs font-semibold uppercase tracking-widest text-on-primary/60 mb-1">Total Balance</p>
-          <p className="font-manrope font-bold text-4xl text-on-primary">{formatCurrency(totalBalance)}</p>
-          <p className={`font-inter text-sm mt-1 ${stats.balance >= 0 ? 'text-tertiary-fixed' : 'text-error-container'}`}>
+        <div className="bg-primary dark:bg-primary-container px-4 py-6 text-center">
+          <p className="font-inter text-xs font-semibold uppercase tracking-widest text-on-primary/70 dark:text-on-primary-container/70 mb-1">Total Balance</p>
+          <p className="font-manrope font-bold text-4xl text-on-primary dark:text-on-primary-container">{formatCurrency(totalBalance)}</p>
+          <p className={`font-inter text-sm mt-1 ${stats.balance >= 0 ? 'text-on-tertiary-container' : 'text-error-container dark:text-on-error-container'}`}>
             {stats.balance >= 0 ? '+' : ''}{formatCurrency(stats.balance)} this month
           </p>
         </div>
@@ -126,13 +132,13 @@ export default function Finance() {
                 <p className="font-inter font-semibold text-xs uppercase tracking-wider text-outline mb-3">Daily Spending</p>
                 <ResponsiveContainer width="100%" height={120}>
                   <BarChart data={dayChartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <XAxis dataKey="day" tick={{ fontFamily: 'Inter', fontSize: 10, fill: '#737686' }} />
-                    <YAxis tick={{ fontFamily: 'Inter', fontSize: 10, fill: '#737686' }} />
+                    <XAxis dataKey="day" tick={{ fontFamily: 'Inter', fontSize: 10, fill: axisTickColor }} />
+                    <YAxis tick={{ fontFamily: 'Inter', fontSize: 10, fill: axisTickColor }} />
                     <Tooltip
                       formatter={(v) => [formatCurrency(Number(v ?? 0)), 'Spent']}
-                      contentStyle={{ fontFamily: 'Inter', fontSize: 12, borderRadius: '8px', border: '1px solid #c3c6d7' }}
+                      contentStyle={{ fontFamily: 'Inter', fontSize: 12, borderRadius: '8px', border: `1px solid ${tooltipBorder}` }}
                     />
-                    <Bar dataKey="amount" fill="#004ac6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="amount" fill={barColor} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

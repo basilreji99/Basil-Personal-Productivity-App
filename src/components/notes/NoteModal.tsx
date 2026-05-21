@@ -257,7 +257,7 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
         </div>
 
         {/* Title */}
-        <div className="px-5 pt-4">
+        <div className="px-5 pt-4 pb-3 border-b border-outline-variant/30">
           <input
             type="text"
             value={title}

@@ -88,10 +88,10 @@ export default {
         'margin': '32px',
       },
       boxShadow: {
-        'card': '0 4px 12px rgba(0,0,0,0.05)',
-        'card-hover': '0 8px 24px rgba(0,0,0,0.08)',
-        'modal': '0 20px 60px rgba(0,0,0,0.15)',
-        'nav': '0 -4px 12px rgba(0,0,0,0.05)',
+        'card': '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.09)',
+        'card-hover': '0 4px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12)',
+        'modal': '0 20px 60px rgba(0,0,0,0.18)',
+        'nav': '0 -2px 8px rgba(0,0,0,0.08)',
         'fab': '0 8px 24px rgba(0,74,198,0.35)',
       },
       animation: {

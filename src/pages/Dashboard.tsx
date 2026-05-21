@@ -9,7 +9,7 @@ import { useTasksStore } from '../store/tasksStore';
 import { useNotesStore } from '../store/notesStore';
 import { useSyncStore } from '../store/syncStore';
 import { useCalendarStore } from '../store/calendarStore';
-import { getTodayString, isOverdue, isDueSoon, formatDisplayDate } from '../utils/dateUtils';
+import { getTodayString, localDateString, isOverdue, isDueSoon, formatDisplayDate } from '../utils/dateUtils';
 import type { CalendarEvent } from '../services/calendarApi';
 
 const PRIORITY_ICON: Record<string, string> = {
@@ -40,6 +40,13 @@ const CALENDAR_COLORS: Record<string, string> = {
 const MINI_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MINI_DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
+function getGreeting(hour: number): string {
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night';
+}
+
 function EventTime({ event }: { event: CalendarEvent }) {
   if (event.isAllDay) return <span className="font-inter text-[10px] text-outline">All day</span>;
   try {
@@ -53,7 +60,7 @@ function EventTime({ event }: { event: CalendarEvent }) {
 function MiniDatePicker({ value, onChange, onClose }: {
   value: string; onChange: (v: string) => void; onClose: () => void;
 }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateString();
   const [viewYear, setViewYear] = useState(() => parseInt(value.slice(0, 4)));
   const [viewMonth, setViewMonth] = useState(() => parseInt(value.slice(5, 7)) - 1);
 
@@ -166,7 +173,7 @@ export default function Dashboard() {
     const shownIds = new Set(selectedDayTasks.map((t) => t.id));
     const in30Days = new Date();
     in30Days.setDate(in30Days.getDate() + 30);
-    const in30Str = in30Days.toISOString().slice(0, 10);
+    const in30Str = localDateString(in30Days);
 
     return tasks
       .filter((t) => {
@@ -260,7 +267,8 @@ export default function Dashboard() {
 
         {/* Hero — date/day prominent, clock secondary */}
         <section className="pt-1">
-          <p className="font-manrope font-bold text-2xl text-on-surface leading-tight">
+          <p className="font-inter text-sm text-on-surface-variant">{getGreeting(now.getHours())}, Basil</p>
+          <p className="font-manrope font-bold text-2xl text-on-surface leading-tight mt-0.5">
             {format(now, 'EEEE')}
           </p>
           <div className="flex items-baseline justify-between mt-0.5">
@@ -372,7 +380,9 @@ export default function Dashboard() {
             <div
               key={task.id}
               className={`bg-surface-container-lowest rounded-xl p-4 shadow-card cursor-pointer hover:shadow-card-hover transition-shadow ${
-                isToday ? 'border-l-4 border-l-error' : task.status === 'done' ? 'opacity-70' : 'border-l-4 border-l-outline-variant'
+                isToday && isOverdue(task.dueDate) ? 'border-l-4 border-l-error' :
+                isToday ? 'border-l-4 border-l-primary/50' :
+                task.status === 'done' ? 'opacity-70' : 'border-l-4 border-l-outline-variant'
               }`}
               onClick={() => navigate(`/tasks/${task.id}`)}
             >
@@ -552,10 +562,10 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/finance')}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-tertiary/10 border border-tertiary/15 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-card text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-emerald-600">payments</span>
+              <div className="w-10 h-10 rounded-xl bg-tertiary/15 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-tertiary">payments</span>
               </div>
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Finance</p>
@@ -564,10 +574,10 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => navigate('/hobbies')}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-secondary/10 border border-secondary/15 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-card text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-violet-600">local_library</span>
+              <div className="w-10 h-10 rounded-xl bg-secondary/15 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-secondary">local_library</span>
               </div>
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Hobbies</p>
@@ -576,10 +586,10 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => navigate('/digest')}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-primary/10 border border-primary/15 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-card text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-amber-600">summarize</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-primary">summarize</span>
               </div>
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Digest</p>
@@ -588,10 +598,10 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => navigate('/yearly')}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-primary/5 border border-primary/10 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-card text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-900/50 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-sky-600">calendar_today</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-primary">calendar_today</span>
               </div>
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Yearly Review</p>
@@ -600,10 +610,10 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => navigate('/goals')}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-primary/5 border border-primary/10 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-sm text-left"
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl bg-secondary/5 border border-secondary/10 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-card text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px] text-primary">target</span>
+              <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[22px] text-secondary">target</span>
               </div>
               <div>
                 <p className="font-manrope font-bold text-sm text-on-surface">Goals & OKRs</p>

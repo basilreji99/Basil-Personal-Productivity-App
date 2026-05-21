@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { localDateString } from '../../utils/dateUtils';
 import TopBar from '../../components/layout/TopBar';
 import Modal from '../../components/ui/Modal';
 import { useBooksStore } from '../../store/booksStore';
@@ -239,7 +240,7 @@ function ReadingListModal({ open, onClose, item }: { open: boolean; onClose: () 
 
   const handleSave = () => {
     if (markRead && item) {
-      moveToReview(item.id, readRating, '', 'read', new Date().toISOString().slice(0, 10));
+      moveToReview(item.id, readRating, '', 'read', localDateString());
     } else if (item) {
       updateReadingListItem(item.id, { title, author, reason, priority, genres });
     } else {

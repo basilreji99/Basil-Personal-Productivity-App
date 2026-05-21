@@ -5,12 +5,12 @@ import Underline from '@tiptap/extension-underline';
 import Modal from '../ui/Modal';
 import TagChip from '../ui/TagChip';
 import DatePicker from '../ui/DatePicker';
-import type { Task, TaskPriority, IssueType, RecurringFrequency } from '../../types';
+import type { Task, TaskPriority, IssueType, RecurringFrequency, ProgressEntry } from '../../types';
+import { nanoid } from '../../utils/nanoid';
 import { useTasksStore } from '../../store/tasksStore';
 import { useSprintStore } from '../../store/sprintStore';
 import { useTagStore } from '../../store/tagStore';
 import { useNotesStore } from '../../store/notesStore';
-import { scheduleTaskNotifications } from '../../services/taskNotifications';
 import { useTimerStore } from '../../store/timerStore';
 
 const PRIORITIES: { value: TaskPriority; label: string; color: string; bg: string }[] = [
@@ -90,6 +90,18 @@ function DescriptionEditor({ content, onChange }: { content: string; onChange: (
   );
 }
 
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TaskModalProps {
@@ -128,6 +140,10 @@ export default function TaskModal({
   const [deadlineTime, setDeadlineTime] = useState('');
   const [notifOffsets, setNotifOffsets] = useState<('2h' | '1h' | '30min' | '15min')[]>(['30min', '15min']);
   const [recurring, setRecurring] = useState<RecurringFrequency | ''>('');
+  const [progressLog, setProgressLog] = useState<ProgressEntry[]>([]);
+  const [newProgressText, setNewProgressText] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   // Available parents by issue type, scoped to a specific epic if opened from within one
   const parentOptions = useMemo(() => {
@@ -172,6 +188,7 @@ export default function TaskModal({
       setDeadlineTime(task.deadlineTime ?? '');
       setNotifOffsets(task.notificationOffsets ?? ['30min', '15min']);
       setRecurring(task.recurring?.frequency ?? '');
+      setProgressLog(task.progressLog ?? []);
     } else {
       setTitle('');
       setDescription('');
@@ -187,10 +204,13 @@ export default function TaskModal({
       setDeadlineTime('');
       setNotifOffsets(['30min', '15min']);
       setRecurring('');
+      setProgressLog([]);
     }
+    setNewProgressText('');
+    setEditingEntryId(null);
     setTagInput('');
     setNoteSearch('');
-  }, [task, open, defaultStatus, parentId, defaultIssueType]);
+  }, [task, open, defaultStatus, parentId, defaultIssueType, defaultSprintId]);
 
   useEffect(() => {
     if (issueType === 'epic') setSelectedParentId(null);
@@ -219,28 +239,18 @@ export default function TaskModal({
       dueDate: dueDate || null,
       startTime: dueDate && startTime ? startTime : undefined,
       deadlineTime: dueDate && deadlineTime ? deadlineTime : undefined,
-      notificationOffsets: dueDate && deadlineTime ? notifOffsets : dueDate && startTime ? notifOffsets : undefined,
+      notificationOffsets: dueDate && (deadlineTime || startTime) ? notifOffsets : task?.notificationOffsets,
       recurring: recurring
         ? { frequency: recurring as RecurringFrequency, nextDue: dueDate || new Date().toISOString() }
         : null,
+      progressLog,
     };
     if (tags.length) recordUsage(tags);
-    let savedId: string;
     if (task) {
       updateTask(task.id, payload);
-      savedId = task.id;
     } else {
-      const created = addTask(payload);
-      savedId = created.id;
+      addTask(payload);
     }
-    scheduleTaskNotifications({
-      id: savedId,
-      title: title.trim(),
-      dueDate: dueDate || null,
-      startTime: payload.startTime,
-      deadlineTime: payload.deadlineTime,
-      notificationOffsets: payload.notificationOffsets,
-    });
     onClose();
   };
 
@@ -257,7 +267,7 @@ export default function TaskModal({
 
   const suggestions = getSuggestions(tags, tagInput, 5);
 
-  const modalTitle = task ? 'Edit' : parentId ? `New ${ISSUE_TYPES.find((t) => t.value === issueType)?.label}` : 'New Task';
+  const modalTitle = task ? 'Edit' : selectedParentId ? `New ${ISSUE_TYPES.find((t) => t.value === issueType)?.label}` : 'New Task';
 
   // Auto-expand details if editing a task that already has values in those fields
   const hasDetails = !!(
@@ -366,6 +376,119 @@ export default function TaskModal({
 
         {/* Description */}
         <DescriptionEditor content={description} onChange={setDescription} />
+
+        {/* Progress Log — available when editing any existing task */}
+        {task && (
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[13px] text-outline">history</span>
+              <span className="font-inter text-xs font-semibold uppercase tracking-wider text-outline">Progress Log</span>
+              {progressLog.length > 0 && (
+                <span className="font-inter text-[10px] text-on-surface-variant normal-case">({progressLog.length})</span>
+              )}
+            </div>
+
+            {/* Add new entry */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newProgressText}
+                onChange={(e) => setNewProgressText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newProgressText.trim()) {
+                    setProgressLog((prev) => [...prev, { id: nanoid(), text: newProgressText.trim(), createdAt: new Date().toISOString() }]);
+                    setNewProgressText('');
+                  }
+                }}
+                placeholder="Log a progress note..."
+                className="flex-1 bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 font-inter text-sm text-on-surface outline-none focus:border-primary/40 placeholder:text-outline/50"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newProgressText.trim()) return;
+                  setProgressLog((prev) => [...prev, { id: nanoid(), text: newProgressText.trim(), createdAt: new Date().toISOString() }]);
+                  setNewProgressText('');
+                }}
+                disabled={!newProgressText.trim()}
+                className="px-3 py-2 bg-primary text-on-primary rounded-lg font-inter text-xs font-semibold disabled:opacity-40 shrink-0"
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Entries — newest first */}
+            {progressLog.length > 0 && (
+              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5">
+                {[...progressLog]
+                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                  .map((entry) => (
+                    <div key={entry.id} className="bg-surface-container rounded-xl px-3 py-2.5 group">
+                      {editingEntryId === entry.id ? (
+                        <div className="space-y-1.5">
+                          <textarea
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            className="w-full bg-surface-container-high border border-outline-variant/30 rounded-lg px-2 py-1.5 font-work-sans text-sm text-on-surface outline-none focus:border-primary/40 resize-none"
+                            rows={2}
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!editingText.trim()) return;
+                                setProgressLog((prev) => prev.map((e) =>
+                                  e.id === entry.id ? { ...e, text: editingText.trim(), updatedAt: new Date().toISOString() } : e
+                                ));
+                                setEditingEntryId(null);
+                              }}
+                              className="px-2.5 py-1 bg-primary text-on-primary rounded-lg font-inter text-xs font-semibold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingEntryId(null)}
+                              className="px-2.5 py-1 text-on-surface-variant font-inter text-xs hover:text-on-surface"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-work-sans text-sm text-on-surface whitespace-pre-wrap break-words">{entry.text}</p>
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="font-inter text-[10px] text-outline">
+                              {formatRelativeTime(entry.createdAt)}
+                              {entry.updatedAt && ' · edited'}
+                            </span>
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => { setEditingEntryId(entry.id); setEditingText(entry.text); }}
+                                className="p-1 rounded text-outline hover:text-primary hover:bg-primary/10 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProgressLog((prev) => prev.filter((e) => e.id !== entry.id))}
+                                className="p-1 rounded text-outline hover:text-error hover:bg-error/10 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">delete</span>
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Details toggle */}
         <button

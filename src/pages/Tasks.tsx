@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import TopBar from '../components/layout/TopBar';
-import { formatDisplayDate, isOverdue, isDueSoon } from '../utils/dateUtils';
+import { formatDisplayDate, localDateString, isOverdue, isDueSoon } from '../utils/dateUtils';
 import TaskModal from '../components/tasks/TaskModal';
 import TagManager from '../components/ui/TagManager';
 import Modal from '../components/ui/Modal';
@@ -585,6 +585,54 @@ function findEpicAncestor(task: Task, allTasks: Task[]): Task | null {
   return null;
 }
 
+function findNearestStory(task: Task, allTasks: Task[]): Task | null {
+  if (task.issueType === 'story') return task;
+  let cur: Task | undefined = task.parentId ? allTasks.find((t) => t.id === task.parentId) : undefined;
+  while (cur) {
+    if (cur.issueType === 'epic') return null;
+    if (cur.issueType === 'story') return cur;
+    cur = cur.parentId ? allTasks.find((t) => t.id === cur!.parentId) : undefined;
+  }
+  return null;
+}
+
+interface StoryHGroup { story: Task; tasks: Task[] }
+interface EpicHGroup { epic: Task | null; stories: StoryHGroup[]; directTasks: Task[] }
+
+function buildHierarchyGroups(filteredTasks: Task[], allTasks: Task[]): EpicHGroup[] {
+  const epicMap = new Map<string | null, Task[]>();
+  for (const t of filteredTasks) {
+    const epicId = findEpicAncestor(t, allTasks)?.id ?? null;
+    if (!epicMap.has(epicId)) epicMap.set(epicId, []);
+    epicMap.get(epicId)!.push(t);
+  }
+  return [...epicMap.entries()]
+    .map(([epicId, epicTasks]) => {
+      const epic = epicId ? allTasks.find((t) => t.id === epicId) ?? null : null;
+      const storyMap = new Map<string | null, Task[]>();
+      for (const t of epicTasks) {
+        const storyId = findNearestStory(t, allTasks)?.id ?? null;
+        if (!storyMap.has(storyId)) storyMap.set(storyId, []);
+        storyMap.get(storyId)!.push(t);
+      }
+      const directTasks = storyMap.get(null) ?? [];
+      const stories: StoryHGroup[] = [...storyMap.entries()]
+        .filter(([id]) => id !== null)
+        .map(([storyId, members]) => ({
+          story: allTasks.find((t) => t.id === storyId)!,
+          tasks: members.filter((t) => t.id !== storyId),
+        }))
+        .sort((a, b) => a.story.order - b.story.order);
+      return { epic, stories, directTasks };
+    })
+    .sort((a, b) => {
+      if (!a.epic && !b.epic) return 0;
+      if (!a.epic) return 1;
+      if (!b.epic) return -1;
+      return a.epic.order - b.epic.order;
+    });
+}
+
 function BoardCard({ task, tasks, onEdit, inSprint = false, showCheck = false }: { task: Task; tasks: Task[]; onEdit: (t: Task) => void; inSprint?: boolean; showCheck?: boolean }) {
   const { moveTask, columns, updateTask } = useTasksStore();
   const { sprints } = useSprintStore();
@@ -702,8 +750,8 @@ function BoardCard({ task, tasks, onEdit, inSprint = false, showCheck = false }:
 function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint | null; onClose: () => void }) {
   const { addSprint, updateSprint } = useSprintStore();
   const { tasks, updateTask: updateTaskItem } = useTasksStore();
-  const today = new Date().toISOString().slice(0, 10);
-  const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const today = localDateString();
+  const twoWeeks = localDateString(new Date(Date.now() + 14 * 86400000));
 
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
@@ -1212,54 +1260,83 @@ function SprintHistoryCard({
 // ─── Sprint Backlog row ───────────────────────────────────────────────────────
 
 function SprintBacklogRow({
-  task, isStretch = false, onEdit, onToggleStretch, onRemove,
+  task, tasks, isStretch = false, onEdit, onToggleStretch, onRemove,
 }: {
-  task: Task; isStretch?: boolean; onEdit: (t: Task) => void;
+  task: Task; tasks: Task[]; isStretch?: boolean; onEdit: (t: Task) => void;
   onToggleStretch: (id: string) => void; onRemove: (id: string) => void;
 }) {
   const cfg = ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task;
   const pri = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.none;
+  const parent = task.parentId ? tasks.find((t) => t.id === task.parentId) : null;
+  const epicAncestor = findEpicAncestor(task, tasks);
+  const storyParent = parent?.issueType === 'story' ? parent : null;
+  const hasBreadcrumb = !!(epicAncestor || storyParent || (parent && parent.issueType !== 'epic' && parent.issueType !== 'story'));
+
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-      isStretch
-        ? 'bg-amber-50 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900/40'
-        : 'bg-surface-container-lowest border-outline-variant/10'
-    }`}>
-      <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
-        {cfg.label.slice(0, 3).toUpperCase()}
-      </span>
-      <span
-        className="flex-1 font-inter text-sm text-on-surface truncate cursor-pointer min-w-0"
-        onClick={() => onEdit(task)}
-      >
-        {task.title}
-      </span>
-      {task.storyPoints != null && (
-        <span className="font-inter text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full shrink-0">
-          {task.storyPoints}pt
+    <div className={hasBreadcrumb ? 'flex flex-col gap-0.5' : ''}>
+      {/* Epic + Story breadcrumb — same pills as BoardCard */}
+      {hasBreadcrumb && (
+        <div className="flex items-center gap-1 px-1 flex-wrap">
+          {epicAncestor && (
+            <span className="inline-flex items-center gap-0.5 font-inter text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-1.5 py-0.5 rounded-md max-w-[130px] truncate">
+              <span className="material-symbols-outlined text-[10px]">bolt</span>
+              <span className="truncate">{epicAncestor.title}</span>
+            </span>
+          )}
+          {storyParent && (
+            <span className="inline-flex items-center gap-0.5 font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-md max-w-[130px] truncate">
+              <span className="material-symbols-outlined text-[10px]">bookmark</span>
+              <span className="truncate">{storyParent.title}</span>
+            </span>
+          )}
+          {parent && parent.issueType !== 'epic' && parent.issueType !== 'story' && (
+            <span className="font-inter text-[10px] text-outline truncate max-w-[130px]">{parent.title}</span>
+          )}
+        </div>
+      )}
+
+      {/* Main row — same layout/style as normal backlog rows */}
+      <div className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-surface-container group transition-colors">
+        <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${cfg.bg} ${cfg.color}`}>
+          {cfg.label.slice(0, 3).toUpperCase()}
         </span>
-      )}
-      {task.priority !== 'none' && (
-        <span className={`font-inter text-[10px] font-semibold shrink-0 ${pri.color}`}>{pri.label}</span>
-      )}
-      <button
-        onClick={() => onToggleStretch(task.id)}
-        className={`shrink-0 p-1 rounded-lg transition-colors ${
-          isStretch
-            ? 'text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/30'
-            : 'text-outline hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20'
-        }`}
-        title={isStretch ? 'Move to committed' : 'Mark as stretch goal'}
-      >
-        <span className="material-symbols-outlined text-[16px]">{isStretch ? 'commit' : 'stars'}</span>
-      </button>
-      <button
-        onClick={() => onRemove(task.id)}
-        className="shrink-0 p-1 rounded-lg text-outline hover:text-error hover:bg-error/5 transition-colors"
-        title="Remove from sprint"
-      >
-        <span className="material-symbols-outlined text-[16px]">remove_circle_outline</span>
-      </button>
+        {isStretch && (
+          <span className="font-inter text-[10px] text-amber-500 dark:text-amber-400 shrink-0" title="Stretch goal">★</span>
+        )}
+        <span
+          className="flex-1 font-work-sans text-sm text-on-surface truncate cursor-pointer min-w-0"
+          onClick={() => onEdit(task)}
+        >
+          {task.title}
+        </span>
+        <DueBadge dueDate={task.dueDate} />
+        {task.storyPoints != null && (
+          <span className="font-inter text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full shrink-0">
+            {task.storyPoints}pt
+          </span>
+        )}
+        {task.priority !== 'none' && (
+          <span className={`font-inter text-[10px] font-semibold shrink-0 ${pri.color}`}>{pri.label}</span>
+        )}
+        <button
+          onClick={() => onToggleStretch(task.id)}
+          className={`shrink-0 p-1 rounded-lg transition-colors opacity-50 group-hover:opacity-100 active:opacity-100 ${
+            isStretch
+              ? 'text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/30'
+              : 'text-outline hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20'
+          }`}
+          title={isStretch ? 'Move to committed' : 'Mark as stretch goal'}
+        >
+          <span className="material-symbols-outlined text-[16px]">{isStretch ? 'commit' : 'stars'}</span>
+        </button>
+        <button
+          onClick={() => onRemove(task.id)}
+          className="shrink-0 p-1 rounded-lg text-outline hover:text-error hover:bg-error/5 transition-colors opacity-50 group-hover:opacity-100 active:opacity-100"
+          title="Remove from sprint"
+        >
+          <span className="material-symbols-outlined text-[16px]">remove_circle_outline</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -1272,7 +1349,7 @@ function BurndownChart({ sprint, sprintTasks }: { sprint: Sprint; sprintTasks: T
     const [ey, em, ed] = sprint.endDate.split('-').map(Number);
     const start = new Date(sy, sm - 1, sd);
     const end   = new Date(ey, em - 1, ed);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateString();
     const total = sprint.totalTasksAtStart ?? sprintTasks.length;
     const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
     const result: { date: string; ideal: number; actual?: number }[] = [];
@@ -1280,7 +1357,7 @@ function BurndownChart({ sprint, sprintTasks }: { sprint: Sprint; sprintTasks: T
     for (let i = 0; i <= totalDays; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
-      const dateStr = d.toISOString().slice(0, 10);
+      const dateStr = localDateString(d);
       const label = format(d, 'MMM d');
       const ideal = Math.max(0, Math.round(total * (1 - i / totalDays)));
       let actual: number | undefined;
@@ -1488,20 +1565,21 @@ export default function Tasks() {
   }, [pinnedTags, tagUsage]);
 
   // Reactively fix tasks that should be in the active sprint but aren't.
-  // Runs on mount and whenever tasks or sprints change.
+  // Runs on mount and whenever sprints change — reads latest tasks directly from store to avoid stale closure.
   useEffect(() => {
+    const { tasks: latestTasks, updateTask: doUpdate } = useTasksStore.getState();
     const active = sprints.find(s => s.status === 'active');
-    tasks.forEach(task => {
+    latestTasks.forEach(task => {
       if (task.issueType === 'epic') return;
-      // Promote sprint-assigned tasks stuck in backlog
+      // Promote sprint-assigned tasks stuck in backlog status
       if (task.sprintId && task.status === 'backlog') {
-        updateTask(task.id, { status: 'todo' });
+        doUpdate(task.id, { status: 'todo' });
         return;
       }
       // Auto-assign tasks whose due date falls within the active sprint
       if (!task.sprintId && task.dueDate && active
           && task.dueDate >= active.startDate && task.dueDate <= active.endDate) {
-        updateTask(task.id, { sprintId: active.id, status: task.status === 'backlog' ? 'todo' : task.status });
+        doUpdate(task.id, { sprintId: active.id, status: task.status === 'backlog' ? 'todo' : task.status });
       }
     });
   }, [sprints]);
@@ -1550,8 +1628,8 @@ export default function Tasks() {
     if (filterDue === 'overdue') list = list.filter((t) => t.dueDate && isOverdue(t.dueDate) && t.status !== 'done');
     if (filterDue === 'week') {
       const inSevenDays = new Date(); inSevenDays.setDate(inSevenDays.getDate() + 7);
-      const todayStr = new Date().toISOString().slice(0, 10);
-      list = list.filter((t) => t.dueDate && t.dueDate >= todayStr && t.dueDate <= inSevenDays.toISOString().slice(0, 10) && t.status !== 'done');
+      const todayStr = localDateString();
+      list = list.filter((t) => t.dueDate && t.dueDate >= todayStr && t.dueDate <= localDateString(inSevenDays) && t.status !== 'done');
     }
     return list;
   }, [tasks, activeTag, filterPriority, filterDue]);
@@ -1587,18 +1665,16 @@ export default function Tasks() {
     if (filterPriority !== 'all') list = list.filter((t) => t.priority === filterPriority);
     if (timelineDateFilter === 'week') {
       const end = new Date(); end.setDate(end.getDate() + 7);
-      const endStr = end.toISOString().slice(0, 10);
-      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= endStr);
+      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= localDateString(end));
     } else if (timelineDateFilter === 'month') {
       const end = new Date(); end.setDate(end.getDate() + 30);
-      const endStr = end.toISOString().slice(0, 10);
-      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= endStr);
+      list = list.filter((t) => isOverdue(t.dueDate) || t.dueDate! <= localDateString(end));
     }
     return list.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
   }, [tasks, activeTag, filterPriority, timelineDateFilter]);
 
   const timelineGroups = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateString();
     const overdueTasks: typeof tasks = [];
     const futureMap = new Map<string, typeof tasks>();
     for (const task of timelineTasks) {
@@ -2195,17 +2271,80 @@ export default function Tasks() {
                       <p className="font-inter text-[10px] text-outline/60 mt-1">Use ⚡ Sprint on Brain Dump items (in Backlog) to add them</p>
                     </div>
                   ) : (
-                    <div className="space-y-1.5">
-                      {sprintBacklogCommitted.map((task) => (
-                        <SprintBacklogRow
-                          key={task.id}
-                          task={task}
-                          isStretch={false}
-                          onEdit={openEdit}
-                          onToggleStretch={(id) => updateTask(id, { isStretchGoal: true })}
-                          onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })}
-                        />
-                      ))}
+                    <div className="space-y-1">
+                      {buildHierarchyGroups(sprintBacklogCommitted, tasks).map(({ epic, stories, directTasks }) => {
+                        const c = epic ? EPIC_COLORS[epicColorIndex(epic.id)] : null;
+                        const allDesc = epic ? getDescendants(epic.id, tasks) : [];
+                        const totalDesc = allDesc.length;
+                        const doneDesc = allDesc.filter((t) => t.status === 'done').length;
+                        const pct = totalDesc > 0 ? Math.round((doneDesc / totalDesc) * 100) : 0;
+                        const countDisplayed = stories.reduce((n, s) => n + s.tasks.length, 0) + directTasks.length;
+
+                        const storyContent = stories.map(({ story, tasks: storyTasks }) => {
+                          const sPri = PRIORITY_CONFIG[story.priority] ?? PRIORITY_CONFIG.none;
+                          return (
+                            <div key={story.id} className="space-y-1">
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-container group transition-colors">
+                                <div className="w-3.5 shrink-0" />
+                                <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded ${ISSUE_CONFIG.story.bg} ${ISSUE_CONFIG.story.color} shrink-0`}>STORY</span>
+                                {storyTasks.length > 0 && (
+                                  <span className="font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full shrink-0">
+                                    {storyTasks.filter((t) => t.status === 'done').length}/{storyTasks.length}
+                                  </span>
+                                )}
+                                <span className="flex-1 font-work-sans text-sm text-on-surface truncate cursor-pointer" onClick={() => openEdit(story)}>{story.title}</span>
+                                {story.status !== 'done' && <DueBadge dueDate={story.dueDate} />}
+                                {story.priority !== 'none' && <span className={`font-inter text-[10px] font-semibold shrink-0 ${sPri.color}`}>{sPri.label}</span>}
+                                <span className="font-inter text-[10px] text-outline shrink-0 bg-surface-container px-1.5 py-0.5 rounded-full">{story.status.replace('_', ' ')}</span>
+                              </div>
+                              {storyTasks.map((task) => (
+                                <div key={task.id} style={{ marginLeft: 20 }}>
+                                  <SprintBacklogRow task={task} tasks={tasks} isStretch={false} onEdit={openEdit}
+                                    onToggleStretch={(id) => updateTask(id, { isStretchGoal: true })}
+                                    onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })} />
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        });
+
+                        const directContent = directTasks.map((task) => (
+                          <SprintBacklogRow key={task.id} task={task} tasks={tasks} isStretch={false} onEdit={openEdit}
+                            onToggleStretch={(id) => updateTask(id, { isStretchGoal: true })}
+                            onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })} />
+                        ));
+
+                        if (epic && c) {
+                          return (
+                            <div key={epic.id} className={`rounded-2xl border ${c.wrap} overflow-hidden`}>
+                              <div className="flex items-center gap-2 px-4 py-3">
+                                <span className={`material-symbols-outlined text-[18px] ${c.icon} shrink-0`}>bolt</span>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`font-inter font-bold text-sm ${c.title} cursor-pointer truncate block`} onClick={() => openEdit(epic)}>{epic.title}</span>
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    {epic.status !== 'done' && <DueBadge dueDate={epic.dueDate} />}
+                                    {countDisplayed > 0 && <span className={`font-inter text-[9px] px-1.5 py-0.5 rounded-full ${c.count}`}>{countDisplayed} tasks</span>}
+                                    {totalDesc > 0 && <span className={`font-inter text-[9px] font-bold ${c.icon}`}>{pct}%</span>}
+                                    <span className={`font-inter text-[9px] border ${c.status} px-1.5 py-0.5 rounded-full`}>{epic.status.replace('_', ' ')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              {totalDesc > 0 && (
+                                <div className="mx-4 mb-0.5">
+                                  <div className={`h-1 ${c.progBg} rounded-full overflow-hidden`}>
+                                    <div className={`h-full ${c.progFill} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                </div>
+                              )}
+                              <div className={`border-t ${c.divider} px-4 pt-2 pb-3 space-y-1`}>
+                                {storyContent}
+                                {directContent}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return <div key="__no_epic" className="space-y-1">{storyContent}{directContent}</div>;
+                      })}
                     </div>
                   )}
                 </div>
@@ -2220,17 +2359,80 @@ export default function Tasks() {
                       Mark committed tasks with ★ to move them here
                     </p>
                   ) : (
-                    <div className="space-y-1.5">
-                      {sprintBacklogStretch.map((task) => (
-                        <SprintBacklogRow
-                          key={task.id}
-                          task={task}
-                          isStretch={true}
-                          onEdit={openEdit}
-                          onToggleStretch={(id) => updateTask(id, { isStretchGoal: false })}
-                          onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })}
-                        />
-                      ))}
+                    <div className="space-y-1">
+                      {buildHierarchyGroups(sprintBacklogStretch, tasks).map(({ epic, stories, directTasks }) => {
+                        const c = epic ? EPIC_COLORS[epicColorIndex(epic.id)] : null;
+                        const allDesc = epic ? getDescendants(epic.id, tasks) : [];
+                        const totalDesc = allDesc.length;
+                        const doneDesc = allDesc.filter((t) => t.status === 'done').length;
+                        const pct = totalDesc > 0 ? Math.round((doneDesc / totalDesc) * 100) : 0;
+                        const countDisplayed = stories.reduce((n, s) => n + s.tasks.length, 0) + directTasks.length;
+
+                        const storyContent = stories.map(({ story, tasks: storyTasks }) => {
+                          const sPri = PRIORITY_CONFIG[story.priority] ?? PRIORITY_CONFIG.none;
+                          return (
+                            <div key={story.id} className="space-y-1">
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-container group transition-colors">
+                                <div className="w-3.5 shrink-0" />
+                                <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded ${ISSUE_CONFIG.story.bg} ${ISSUE_CONFIG.story.color} shrink-0`}>STORY</span>
+                                {storyTasks.length > 0 && (
+                                  <span className="font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full shrink-0">
+                                    {storyTasks.filter((t) => t.status === 'done').length}/{storyTasks.length}
+                                  </span>
+                                )}
+                                <span className="flex-1 font-work-sans text-sm text-on-surface truncate cursor-pointer" onClick={() => openEdit(story)}>{story.title}</span>
+                                {story.status !== 'done' && <DueBadge dueDate={story.dueDate} />}
+                                {story.priority !== 'none' && <span className={`font-inter text-[10px] font-semibold shrink-0 ${sPri.color}`}>{sPri.label}</span>}
+                                <span className="font-inter text-[10px] text-outline shrink-0 bg-surface-container px-1.5 py-0.5 rounded-full">{story.status.replace('_', ' ')}</span>
+                              </div>
+                              {storyTasks.map((task) => (
+                                <div key={task.id} style={{ marginLeft: 20 }}>
+                                  <SprintBacklogRow task={task} tasks={tasks} isStretch={true} onEdit={openEdit}
+                                    onToggleStretch={(id) => updateTask(id, { isStretchGoal: false })}
+                                    onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })} />
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        });
+
+                        const directContent = directTasks.map((task) => (
+                          <SprintBacklogRow key={task.id} task={task} tasks={tasks} isStretch={true} onEdit={openEdit}
+                            onToggleStretch={(id) => updateTask(id, { isStretchGoal: false })}
+                            onRemove={(id) => updateTask(id, { sprintId: null, status: 'backlog' })} />
+                        ));
+
+                        if (epic && c) {
+                          return (
+                            <div key={epic.id} className={`rounded-2xl border ${c.wrap} overflow-hidden`}>
+                              <div className="flex items-center gap-2 px-4 py-3">
+                                <span className={`material-symbols-outlined text-[18px] ${c.icon} shrink-0`}>bolt</span>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`font-inter font-bold text-sm ${c.title} cursor-pointer truncate block`} onClick={() => openEdit(epic)}>{epic.title}</span>
+                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    {epic.status !== 'done' && <DueBadge dueDate={epic.dueDate} />}
+                                    {countDisplayed > 0 && <span className={`font-inter text-[9px] px-1.5 py-0.5 rounded-full ${c.count}`}>{countDisplayed} tasks</span>}
+                                    {totalDesc > 0 && <span className={`font-inter text-[9px] font-bold ${c.icon}`}>{pct}%</span>}
+                                    <span className={`font-inter text-[9px] border ${c.status} px-1.5 py-0.5 rounded-full`}>{epic.status.replace('_', ' ')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              {totalDesc > 0 && (
+                                <div className="mx-4 mb-0.5">
+                                  <div className={`h-1 ${c.progBg} rounded-full overflow-hidden`}>
+                                    <div className={`h-full ${c.progFill} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                </div>
+                              )}
+                              <div className={`border-t ${c.divider} px-4 pt-2 pb-3 space-y-1`}>
+                                {storyContent}
+                                {directContent}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return <div key="__no_epic" className="space-y-1">{storyContent}{directContent}</div>;
+                      })}
                     </div>
                   )}
                 </div>
@@ -2432,11 +2634,7 @@ export default function Tasks() {
             >
               <div className="lg:grid lg:grid-cols-3 lg:gap-3 lg:items-start space-y-3 lg:space-y-0">
                 {boardColumns.map((col) => {
-                  const colTasks = boardSprintItems.filter((t) =>
-                    col.id === 'todo'
-                      ? (t.status === 'todo' || t.status === 'backlog')
-                      : t.status === col.id
-                  );
+                  const colTasks = boardSprintItems.filter((t) => t.status === col.id);
                   const collapsed = collapsedSections.has(col.id);
                   const isDone = col.id === 'done';
                   const sortMode = boardSort[col.id] ?? 'manual';
@@ -2518,9 +2716,6 @@ export default function Tasks() {
                       {!collapsed && (
                         <div className={`px-3 pb-3 border-t border-outline-variant/20 pt-2 ${isDone ? 'opacity-70' : ''}`}>
                           <DroppableColumnBody id={col.id}>
-                            {sortedColTasks.map((task) => (
-                              <DraggableBoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} showCheck={col.id === 'todo'} />
-                            ))}
                             {sortedColTasks.length === 0 && !currentSprint && (
                               <p className="text-center font-inter text-xs text-outline py-4">No tasks</p>
                             )}
@@ -2529,6 +2724,66 @@ export default function Tasks() {
                                 <span className="font-inter text-xs">Drop here</span>
                               </div>
                             )}
+                            {buildHierarchyGroups(sortedColTasks, tasks).map(({ epic, stories, directTasks }) => {
+                              const c = epic ? EPIC_COLORS[epicColorIndex(epic.id)] : null;
+                              const allDesc = epic ? getDescendants(epic.id, tasks) : [];
+                              const totalDesc = allDesc.length;
+                              const doneDesc = allDesc.filter((t) => t.status === 'done').length;
+                              const pct = totalDesc > 0 ? Math.round((doneDesc / totalDesc) * 100) : 0;
+
+                              const storyContent = stories.map(({ story, tasks: storyTasks }) => (
+                                <div key={story.id} className="space-y-1">
+                                  <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-container group transition-colors">
+                                    <div className="w-3 shrink-0" />
+                                    <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded ${ISSUE_CONFIG.story.bg} ${ISSUE_CONFIG.story.color} shrink-0`}>STORY</span>
+                                    {storyTasks.length > 0 && (
+                                      <span className="font-inter text-[10px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded-full shrink-0">
+                                        {storyTasks.filter((t) => t.status === 'done').length}/{storyTasks.length}
+                                      </span>
+                                    )}
+                                    <span className="flex-1 font-work-sans text-xs text-on-surface truncate cursor-pointer" onClick={() => openEdit(story)}>{story.title}</span>
+                                  </div>
+                                  {storyTasks.map((task) => (
+                                    <div key={task.id} style={{ marginLeft: 16 }}>
+                                      <DraggableBoardCard task={task} tasks={tasks} onEdit={openEdit} showCheck={col.id === 'todo'} />
+                                    </div>
+                                  ))}
+                                </div>
+                              ));
+
+                              const directContent = directTasks.map((task) => (
+                                <DraggableBoardCard key={task.id} task={task} tasks={tasks} onEdit={openEdit} showCheck={col.id === 'todo'} />
+                              ));
+
+                              if (epic && c) {
+                                return (
+                                  <div key={epic.id} className={`rounded-2xl border ${c.wrap} overflow-hidden mb-1`}>
+                                    <div className="flex items-center gap-2 px-3 py-2">
+                                      <span className={`material-symbols-outlined text-[15px] ${c.icon} shrink-0`}>bolt</span>
+                                      <div className="flex-1 min-w-0">
+                                        <span className={`font-inter font-bold text-xs ${c.title} truncate block cursor-pointer`} onClick={() => openEdit(epic)}>{epic.title}</span>
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                          {totalDesc > 0 && <span className={`font-inter text-[9px] font-bold ${c.icon}`}>{pct}%</span>}
+                                          <span className={`font-inter text-[9px] border ${c.status} px-1 py-0.5 rounded-full`}>{epic.status.replace('_', ' ')}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {totalDesc > 0 && (
+                                      <div className="mx-3 mb-0.5">
+                                        <div className={`h-0.5 ${c.progBg} rounded-full overflow-hidden`}>
+                                          <div className={`h-full ${c.progFill} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className={`border-t ${c.divider} px-2 pt-1.5 pb-2 space-y-1`}>
+                                      {storyContent}
+                                      {directContent}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return <div key="__no_epic" className="space-y-1 mb-1">{storyContent}{directContent}</div>;
+                            })}
                           </DroppableColumnBody>
                         </div>
                       )}

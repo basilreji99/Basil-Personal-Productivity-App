@@ -22,7 +22,7 @@ export default function BottomNav() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-lg flex-1 transition-all duration-200 ${
+              `flex flex-col items-center justify-center gap-1 px-1 py-1 flex-1 transition-all duration-200 ${
                 isActive
                   ? 'text-primary'
                   : 'text-on-surface-variant opacity-60 hover:opacity-100 hover:text-primary'
@@ -32,11 +32,15 @@ export default function BottomNav() {
             {({ isActive }) => (
               <>
                 <span
-                  className={`material-symbols-outlined text-[22px] transition-all duration-200 ${isActive ? 'icon-fill scale-110' : ''}`}
+                  className={`flex items-center justify-center w-14 h-8 rounded-full transition-all duration-200 ${isActive ? 'bg-primary/12 dark:bg-primary/25' : ''}`}
                 >
-                  {isActive ? iconFill : icon}
+                  <span
+                    className={`material-symbols-outlined text-[22px] transition-all duration-200 ${isActive ? 'icon-fill' : ''}`}
+                  >
+                    {isActive ? iconFill : icon}
+                  </span>
                 </span>
-                <span className="font-inter text-[8px] font-semibold uppercase tracking-wide leading-none">
+                <span className="font-inter text-[11px] font-semibold uppercase tracking-wide leading-none">
                   {label}
                 </span>
               </>

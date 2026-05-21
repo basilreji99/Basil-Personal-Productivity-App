@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { localDateString } from '../../utils/dateUtils';
 
 const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAL_DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -11,7 +12,7 @@ export default function DatePicker({
   placeholder?: string;
   clearable?: boolean;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => value ? parseInt(value.slice(0, 4)) : new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.slice(5, 7)) - 1 : new Date().getMonth());

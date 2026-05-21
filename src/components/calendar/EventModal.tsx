@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LocalEvent } from '../../store/calendarStore';
+import { localDateString } from '../../utils/dateUtils';
 
 const EVENT_COLORS = [
   '#4285f4', '#e67c73', '#33b679', '#f6c026',
@@ -15,7 +16,7 @@ interface EventModalProps {
 }
 
 export default function EventModal({ initial, defaultDate, onSave, onDelete, onClose }: EventModalProps) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? defaultDate ?? today);
   const [isAllDay, setIsAllDay] = useState(initial?.isAllDay ?? true);

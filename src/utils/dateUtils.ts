@@ -66,6 +66,10 @@ export const getMonthName = (month: number): string => {
 
 export const getTodayString = (): string => formatDate(new Date());
 
+// Formats a Date as YYYY-MM-DD in LOCAL timezone (unlike toISOString which is UTC)
+export const localDateString = (date: Date = new Date()): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 export const isOverdue = (dueDate: string | null): boolean => {
   if (!dueDate) return false;
   const due = parseLocalDate(dueDate);

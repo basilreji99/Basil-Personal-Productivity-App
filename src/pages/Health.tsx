@@ -10,6 +10,7 @@ import { runHCSync } from '../services/hcSync';
 import { syncHealthToSheets } from '../services/sheetsService';
 import { useSyncStore } from '../store/syncStore';
 import type { BodyMeasurement } from '../types';
+import { localDateString } from '../utils/dateUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -300,7 +301,7 @@ function LogModal({ open, onClose, measurement }: {
   open: boolean; onClose: () => void; measurement?: BodyMeasurement | null;
 }) {
   const { addMeasurement, updateMeasurement, deleteMeasurement, calcBMI, profile } = useHealthStore();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
 
   const [date, setDate]               = useState(today);
   const [weight, setWeight]           = useState('');
@@ -451,8 +452,6 @@ export default function Health() {
   const navigate = useNavigate();
   const { measurements, profile, getLatest, calcBMI, updateProfile } = useHealthStore();
   const { sportSessions } = useFitnessStore();
-  const hcLastSync = localStorage.getItem('basil-hc-last-sync');
-
   const [tab, setTab]                 = useState<HealthTab>('body');
   const [logOpen, setLogOpen]         = useState(false);
   const [editEntry, setEditEntry]     = useState<BodyMeasurement | null>(null);
@@ -461,6 +460,7 @@ export default function Health() {
   const [hcSyncing, setHcSyncing]     = useState(false);
   const [hcStatus, setHcStatus]       = useState<string | null>(null);
   const [hcNeedsSetup, setHcNeedsSetup] = useState(false);
+  const [hcLastSync, setHcLastSync]   = useState(() => localStorage.getItem('basil-hc-last-sync'));
   const [sheetsSyncing, setSheetsSyncing] = useState(false);
   const [sheetsStatus, setSheetsStatus]   = useState<string | null>(null);
 
@@ -493,7 +493,10 @@ export default function Health() {
     const lastSync = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
     if (Date.now() - lastSync < FOUR_HOURS) return;
     runHCSync().then(({ imported }) => {
-      if (imported > 0) setHcStatus(`Auto-synced ${imported} records from Health Connect`);
+      if (imported > 0) {
+        setHcStatus(`Auto-synced ${imported} records from Health Connect`);
+        setHcLastSync(localStorage.getItem('basil-hc-last-sync'));
+      }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNative]);
@@ -544,6 +547,7 @@ export default function Health() {
       } else {
         setHcStatus(`Sync complete — ${imported} records imported`);
       }
+      setHcLastSync(localStorage.getItem('basil-hc-last-sync'));
     } catch (e: unknown) {
       setHcStatus(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
