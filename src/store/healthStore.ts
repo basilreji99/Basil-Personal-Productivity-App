@@ -82,7 +82,7 @@ export const useHealthStore = create<HealthState>()(
           return {
             ...persisted,
             profile: existing.length > 0 ? (persisted?.profile ?? DEFAULT_PROFILE) : DEFAULT_PROFILE,
-            measurements: existing.length > 0 ? existing : INITIAL_MEASUREMENTS,
+            measurements: existing.length > 0 ? existing : [],
           };
         }
         return persisted;

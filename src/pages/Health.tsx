@@ -466,8 +466,8 @@ export default function Health() {
 
   // Profile inline editing state
   const [height, setHeight]           = useState(profile.height?.toString() ?? '');
-  const [bfMin, setBfMin]             = useState(profile.targetBodyFatMin.toString());
-  const [bfMax, setBfMax]             = useState(profile.targetBodyFatMax.toString());
+  const [bfMin, setBfMin]             = useState(profile.targetBodyFatMin?.toString() ?? '');
+  const [bfMax, setBfMax]             = useState(profile.targetBodyFatMax?.toString() ?? '');
   const [targetWeight, setTargetWeight] = useState(profile.targetWeight?.toString() ?? '');
   const [targetMuscle, setTargetMuscle] = useState(profile.targetMuscleMass?.toString() ?? '');
   const [profileSaved, setProfileSaved] = useState(false);
@@ -476,8 +476,8 @@ export default function Health() {
   useEffect(() => {
     if (tab !== 'profile') return;
     setHeight(profile.height?.toString() ?? '');
-    setBfMin(profile.targetBodyFatMin.toString());
-    setBfMax(profile.targetBodyFatMax.toString());
+    setBfMin(profile.targetBodyFatMin?.toString() ?? '');
+    setBfMax(profile.targetBodyFatMax?.toString() ?? '');
     setTargetWeight(profile.targetWeight?.toString() ?? '');
     setTargetMuscle(profile.targetMuscleMass?.toString() ?? '');
     setProfileSaved(false);
@@ -771,18 +771,20 @@ export default function Health() {
                 <div className="relative h-4 bg-surface-container rounded-full overflow-hidden">
                   <div className="absolute inset-0 rounded-full opacity-30"
                     style={{ background: 'linear-gradient(to right, #3b82f6 0%, #22c55e 35%, #f59e0b 65%, #ef4444 100%)' }} />
-                  <div className="absolute top-0 bottom-0 bg-green-200/50 border-l border-r border-green-400/40"
-                    style={{
-                      left: `${Math.min(100, (profile.targetBodyFatMin / 35) * 100)}%`,
-                      width: `${Math.min(100, ((profile.targetBodyFatMax - profile.targetBodyFatMin) / 35) * 100)}%`,
-                    }} />
+                  {profile.targetBodyFatMin != null && profile.targetBodyFatMax != null && (
+                    <div className="absolute top-0 bottom-0 bg-green-200/50 border-l border-r border-green-400/40"
+                      style={{
+                        left: `${Math.min(100, (profile.targetBodyFatMin / 35) * 100)}%`,
+                        width: `${Math.min(100, ((profile.targetBodyFatMax - profile.targetBodyFatMin) / 35) * 100)}%`,
+                      }} />
+                  )}
                   <div className="absolute top-1 bottom-1 w-1.5 h-2.5 rounded-sm bg-white shadow-md -translate-x-1/2"
                     style={{ left: `${Math.min(100, (latest.bodyFat / 35) * 100)}%` }} />
                 </div>
                 <div className="flex justify-between mt-1">
                   <span className="font-inter text-[10px] text-outline">5%</span>
                   <span className="font-inter text-[10px] font-semibold text-on-surface">
-                    {latest.bodyFat}% {latest.bodyFat <= profile.targetBodyFatMax && latest.bodyFat >= profile.targetBodyFatMin ? '✓ In range' : latest.bodyFat > profile.targetBodyFatMax ? `↓ ${(latest.bodyFat - profile.targetBodyFatMax).toFixed(1)}% to go` : '↑ Below target'}
+                    {latest.bodyFat}% {profile.targetBodyFatMin != null && profile.targetBodyFatMax != null ? (latest.bodyFat <= profile.targetBodyFatMax && latest.bodyFat >= profile.targetBodyFatMin ? '✓ In range' : latest.bodyFat > profile.targetBodyFatMax ? `↓ ${(latest.bodyFat - profile.targetBodyFatMax).toFixed(1)}% to go` : '↑ Below target') : ''}
                   </span>
                   <span className="font-inter text-[10px] text-outline">35%</span>
                 </div>
