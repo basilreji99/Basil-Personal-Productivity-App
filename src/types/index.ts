@@ -7,7 +7,8 @@ export type NoteColor =
   | 'green'
   | 'yellow'
   | 'purple'
-  | 'orange';
+  | 'orange'
+  | 'custom';
 
 export type NoteType = 'text' | 'checklist' | 'bullets' | 'numbered';
 
@@ -33,6 +34,7 @@ export interface Note {
   images: string[]; // base64 data URLs
   tags: string[];
   color: NoteColor;
+  customColor?: string;
   pinned: boolean;
   folderId?: string | null;
   createdAt: string;

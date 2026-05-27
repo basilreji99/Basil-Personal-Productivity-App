@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import TagChip from '../ui/TagChip';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import type { Note } from '../../types';
@@ -32,6 +32,9 @@ interface NoteCardProps {
   onDelete: (id: string) => void;
   onPin: (id: string) => void;
   view?: NoteViewMode;
+  selected?: boolean;
+  onLongPress?: () => void;
+  onToggleSelect?: () => void;
 }
 
 const stripHtml = (html: string) =>
@@ -118,13 +121,37 @@ function NoteContent({ note, clamp = 6 }: { note: Note; clamp?: number }) {
   return null;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonry' }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonry', selected, onLongPress, onToggleSelect }: NoteCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const refCount = useTasksStore((s) =>
     s.tasks.filter((t) => t.linkedNoteIds?.includes(note.id)).length
   );
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const bgClass = `${NOTE_BG[note.color] ?? NOTE_BG.default} ${NOTE_BG_DARK[note.color] ?? ''}`;
+  const customBg = note.color === 'custom' && note.customColor ? note.customColor : null;
+  const bgClass = customBg ? '' : `${NOTE_BG[note.color] ?? NOTE_BG.default} ${NOTE_BG_DARK[note.color] ?? ''}`;
+  const cardStyle = customBg ? { backgroundColor: customBg } : undefined;
+  const selectionRing = selected !== undefined ? (selected ? 'ring-2 ring-primary' : 'opacity-70') : '';
+
+  const handleTouchStart = () => {
+    if (!onLongPress) return;
+    longPressTimer.current = setTimeout(() => { onLongPress(); longPressTimer.current = null; }, 500);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  };
+  const handleCardClick = () => {
+    if (selected !== undefined) onToggleSelect?.();
+    else onEdit(note);
+  };
+
+  const SelectionOverlay = () => selected !== undefined ? (
+    <div className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+      selected ? 'bg-primary border-primary' : 'border-outline-variant bg-surface-container/80'
+    }`}>
+      {selected && <span className="material-symbols-outlined text-[12px] text-on-primary icon-fill">check</span>}
+    </div>
+  ) : null;
 
   // ── List view ──────────────────────────────────────────────────────────────
   if (view === 'list') {
@@ -132,9 +159,14 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonr
     return (
       <>
         <div
-          className={`group flex items-center gap-3 px-4 py-3 ${bgClass} cursor-pointer hover:bg-surface-container active:bg-surface-container-high transition-colors border-b border-outline-variant/15`}
-          onClick={() => onEdit(note)}
+          className={`group flex items-center gap-3 px-4 py-3 ${bgClass} ${selectionRing} cursor-pointer hover:bg-surface-container active:bg-surface-container-high transition-colors border-b border-outline-variant/15 relative`}
+          style={cardStyle}
+          onClick={handleCardClick}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={cancelLongPress}
+          onTouchMove={cancelLongPress}
         >
+          <SelectionOverlay />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               {note.pinned && (
@@ -176,9 +208,14 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonr
     return (
       <>
         <div
-          className={`${bgClass} rounded-xl shadow-card hover:shadow-card-hover transition-all duration-200 cursor-pointer group relative flex flex-col h-48 overflow-hidden`}
-          onClick={() => onEdit(note)}
+          className={`${bgClass} ${selectionRing} rounded-xl shadow-card hover:shadow-card-hover transition-all duration-200 cursor-pointer group relative flex flex-col h-48 overflow-hidden`}
+          style={cardStyle}
+          onClick={handleCardClick}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={cancelLongPress}
+          onTouchMove={cancelLongPress}
         >
+          <SelectionOverlay />
           {note.images?.[0] && (
             <img src={note.images[0]} alt="" className="w-full h-24 object-cover rounded-t-xl" />
           )}
@@ -238,9 +275,14 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, view = 'masonr
   return (
     <>
       <div
-        className={`masonry-item ${bgClass} rounded-xl shadow-card hover:shadow-card-hover transition-all duration-200 cursor-pointer group relative max-h-[300px] overflow-hidden`}
-        onClick={() => onEdit(note)}
+        className={`masonry-item ${bgClass} ${selectionRing} rounded-xl shadow-card hover:shadow-card-hover transition-all duration-200 cursor-pointer group relative max-h-[300px] overflow-hidden`}
+        style={cardStyle}
+        onClick={handleCardClick}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={cancelLongPress}
+        onTouchMove={cancelLongPress}
       >
+        <SelectionOverlay />
         <div className="p-4">
           {note.pinned && (
             <span className="material-symbols-outlined text-[14px] text-primary icon-fill absolute top-3 right-3">push_pin</span>

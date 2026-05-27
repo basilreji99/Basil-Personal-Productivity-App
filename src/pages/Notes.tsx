@@ -14,6 +14,7 @@ import TopBar from '../components/layout/TopBar';
 import NoteCard, { type NoteViewMode } from '../components/notes/NoteCard';
 import NoteModal from '../components/notes/NoteModal';
 import TagManager from '../components/ui/TagManager';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useNotesStore } from '../store/notesStore';
 import { useTagStore } from '../store/tagStore';
 import type { Note, NoteFolder } from '../types';
@@ -154,6 +155,9 @@ export default function Notes() {
   const [view, setView] = useState<'folders' | NoteViewMode>(
     () => (localStorage.getItem('notes-view') as NoteViewMode) ?? 'masonry',
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedDeleteConfirm, setSelectedDeleteConfirm] = useState(false);
+  const isSelectionMode = selectedIds.size > 0;
 
   // Auto-open a note when navigated from another page (e.g. quick-note from Dashboard)
   useEffect(() => {
@@ -245,6 +249,47 @@ export default function Notes() {
   };
 
   const openNew = () => { setEditNote(null); setModalOpen(true); };
+
+  const handleLongPress = (id: string) => setSelectedIds(new Set([id]));
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const getSelectionProps = (n: Note) => ({
+    onLongPress: () => handleLongPress(n.id),
+    onToggleSelect: () => handleToggleSelect(n.id),
+    selected: isSelectionMode ? selectedIds.has(n.id) : undefined,
+  });
+
+  const handleCopySelected = async () => {
+    const strip = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    const text = filtered.filter(n => selectedIds.has(n.id)).map(n => {
+      const parts: string[] = [];
+      if (n.title) parts.push(n.title);
+      const body = n.content ? strip(n.content) : '';
+      if (body) parts.push(body);
+      return parts.join('\n');
+    }).join('\n\n');
+    await navigator.clipboard.writeText(text);
+    setSelectedIds(new Set());
+  };
+
+  const handleDeleteSelected = () => {
+    selectedIds.forEach(id => deleteNote(id));
+    setSelectedIds(new Set());
+    setSelectedDeleteConfirm(false);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(n => n.id)));
+  };
 
   const hasActiveFilter = activeTag !== 'All' || sortOrder !== 'newest';
 
@@ -502,24 +547,24 @@ export default function Notes() {
           );
 
           const renderUnpinnedSections = (v: 'list' | 'grid' | 'masonry') => {
-            const cardProps = { onEdit: handleEdit, onDelete: deleteNote, onPin: togglePin, view: v };
+            const baseProps = { onEdit: handleEdit, onDelete: deleteNote, onPin: togglePin, view: v };
             const listWrap = (ns: typeof notes) => (
               <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card md:border-0 md:shadow-none md:rounded-none md:grid md:grid-cols-2 md:gap-2">
                 {ns.map((n) => (
                   <div key={n.id} className="md:rounded-xl md:overflow-hidden md:border md:border-outline-variant/20 md:shadow-card">
-                    <NoteCard note={n} {...cardProps} />
+                    <NoteCard note={n} {...baseProps} {...getSelectionProps(n)} />
                   </div>
                 ))}
               </div>
             );
             const gridWrap = (ns: typeof notes) => (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {ns.map((n) => <NoteCard key={n.id} note={n} {...cardProps} />)}
+                {ns.map((n) => <NoteCard key={n.id} note={n} {...baseProps} {...getSelectionProps(n)} />)}
               </div>
             );
             const masonryWrap = (ns: typeof notes) => (
               <div className="masonry-grid" style={{ columnCount: 1 }}>
-                {ns.map((n) => <NoteCard key={n.id} note={n} {...cardProps} />)}
+                {ns.map((n) => <NoteCard key={n.id} note={n} {...baseProps} {...getSelectionProps(n)} />)}
               </div>
             );
             const wrap = v === 'list' ? listWrap : v === 'grid' ? gridWrap : masonryWrap;
@@ -557,7 +602,7 @@ export default function Notes() {
                   <div className="rounded-xl overflow-hidden border border-outline-variant/20 shadow-card md:border-0 md:shadow-none md:rounded-none md:grid md:grid-cols-2 md:gap-2">
                     {pinnedNotes.map((n) => (
                       <div key={n.id} className="md:rounded-xl md:overflow-hidden md:border md:border-outline-variant/20 md:shadow-card">
-                        <NoteCard note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" />
+                        <NoteCard note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="list" {...getSelectionProps(n)} />
                       </div>
                     ))}
                   </div>
@@ -573,7 +618,7 @@ export default function Notes() {
                 <>
                   {(hasBoth || hasMultipleAllSections) && <PinnedHeader />}
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {pinnedNotes.map((n) => <NoteCard key={n.id} note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" />)}
+                    {pinnedNotes.map((n) => <NoteCard key={n.id} note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="grid" {...getSelectionProps(n)} />)}
                   </div>
                 </>
               )}
@@ -592,7 +637,7 @@ export default function Notes() {
                       @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
                       @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
                     `}</style>
-                    {pinnedNotes.map((n) => <NoteCard key={n.id} note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" />)}
+                    {pinnedNotes.map((n) => <NoteCard key={n.id} note={n} onEdit={handleEdit} onDelete={deleteNote} onPin={togglePin} view="masonry" {...getSelectionProps(n)} />)}
                   </div>
                 </>
               )}
@@ -623,6 +668,43 @@ export default function Notes() {
           </button>
         </div>
       </div>
+
+      {/* Selection action bar — overlays quick capture when selection mode active */}
+      {isSelectionMode && (
+        <div className="fixed left-0 right-0 z-50 px-4" style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
+          <div className="max-w-lg mx-auto pb-2">
+            <div className="bg-surface-container-low rounded-2xl shadow-modal border border-outline-variant/30 px-3 py-2.5 flex items-center gap-1">
+              <span className="font-inter text-sm font-semibold text-on-surface mr-1">{selectedIds.size}</span>
+              <button onClick={handleCopySelected} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container active:bg-surface-container font-inter text-xs">
+                <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                Copy
+              </button>
+              <button onClick={handleSelectAll} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container active:bg-surface-container font-inter text-xs">
+                <span className="material-symbols-outlined text-[15px]">{selectedIds.size === filtered.length ? 'deselect' : 'select_all'}</span>
+                {selectedIds.size === filtered.length ? 'None' : 'All'}
+              </button>
+              <button onClick={() => setSelectedDeleteConfirm(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-error hover:bg-error/10 active:bg-error/10 font-inter text-xs">
+                <span className="material-symbols-outlined text-[15px]">delete</span>
+                Delete
+              </button>
+              <div className="flex-1" />
+              <button onClick={() => setSelectedIds(new Set())} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container active:bg-surface-container">
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={selectedDeleteConfirm}
+        onClose={() => setSelectedDeleteConfirm(false)}
+        onConfirm={handleDeleteSelected}
+        title="Delete Notes"
+        message={`Delete ${selectedIds.size} selected note${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+      />
 
       <NoteModal
         open={modalOpen}

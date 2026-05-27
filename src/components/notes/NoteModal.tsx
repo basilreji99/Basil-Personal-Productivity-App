@@ -58,10 +58,12 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
   const { recordUsage, getSuggestions } = useTagStore();
   const [title, setTitle] = useState('');
   const [color, setColor] = useState<NoteColor>('default');
+  const [customColor, setCustomColor] = useState('#ffffff');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const colorInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-save
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +92,7 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
       editor.commands.setContent(html || '');
       setTitle(note?.title ?? '');
       setColor(note?.color ?? 'default');
+      setCustomColor(note?.customColor ?? '#ffffff');
       setTags(note?.tags ?? []);
       setConfirmingDelete(false);
     }
@@ -112,7 +115,7 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
     const isEmpty = !title.trim() && (!html || html === '<p></p>');
     if (isEmpty) return;
     if (tags.length) recordUsage(tags);
-    onSave({ title: title.trim() || 'Untitled', content: html, noteType: 'text', checklistItems: [], images: [], color, tags });
+    onSave({ title: title.trim() || 'Untitled', content: html, noteType: 'text', checklistItems: [], images: [], color, customColor: color === 'custom' ? customColor : undefined, tags });
     setAutoSaved(true);
     if (autoSavedIndicatorRef.current) clearTimeout(autoSavedIndicatorRef.current);
     autoSavedIndicatorRef.current = setTimeout(() => setAutoSaved(false), 2000);
@@ -150,6 +153,7 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
       checklistItems: [],
       images: [],
       color,
+      customColor: color === 'custom' ? customColor : undefined,
       tags,
     });
     onClose();
@@ -273,7 +277,7 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
         </div>
 
         {/* Color picker */}
-        <div className="flex gap-2 px-5 pb-3">
+        <div className="flex gap-2 px-5 pb-3 flex-wrap">
           {NOTE_COLORS.map((c) => (
             <button
               key={c.value}
@@ -285,6 +289,25 @@ export default function NoteModal({ open, onClose, onSave, onDelete, note }: Not
               title={c.label}
             />
           ))}
+          <button
+            type="button"
+            onClick={() => colorInputRef.current?.click()}
+            className={`w-7 h-7 rounded-full border-2 transition-all ${
+              color === 'custom' ? 'ring-2 ring-offset-1 ring-primary border-transparent' : 'border-transparent'
+            }`}
+            style={color === 'custom' && customColor
+              ? { backgroundColor: customColor }
+              : { background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }
+            }
+            title="Custom color"
+          />
+          <input
+            ref={colorInputRef}
+            type="color"
+            className="hidden"
+            value={customColor}
+            onChange={(e) => { setCustomColor(e.target.value); setColor('custom'); scheduleAutoSave(); }}
+          />
         </div>
 
         {/* Tags */}
