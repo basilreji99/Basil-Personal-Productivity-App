@@ -748,7 +748,7 @@ function BoardCard({ task, tasks, onEdit, inSprint = false, showCheck = false }:
 // ─── Sprint Modal ─────────────────────────────────────────────────────────────
 
 function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint | null; onClose: () => void }) {
-  const { addSprint, updateSprint } = useSprintStore();
+  const { addSprint, updateSprint, sprints } = useSprintStore();
   const { tasks, updateTask: updateTaskItem } = useTasksStore();
   const today = localDateString();
   const twoWeeks = localDateString(new Date(Date.now() + 14 * 86400000));
@@ -759,6 +759,8 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
   const [endDate, setEndDate] = useState(twoWeeks);
   const [status, setStatus] = useState<'planned' | 'active' | 'completed'>('planned');
   const [capacity, setCapacity] = useState<string>('');
+  const [selectedCarryoverIds, setSelectedCarryoverIds] = useState<Set<string>>(new Set());
+  const [carryoverExpanded, setCarryoverExpanded] = useState(true);
 
   useEffect(() => {
     if (sprint) {
@@ -775,8 +777,58 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
       setEndDate(twoWeeks);
       setStatus('planned');
       setCapacity('');
+      setSelectedCarryoverIds(new Set());
+      setCarryoverExpanded(true);
     }
   }, [sprint, open]);
+
+  // Incomplete tasks from completed sprints + backlog — only shown when creating
+  const carryoverGroups = useMemo(() => {
+    if (sprint) return [];
+    const completedSprintMap = new Map(
+      sprints.filter(s => s.status === 'completed').map(s => [s.id, s])
+    );
+    const candidates = tasks.filter(t =>
+      t.status !== 'done' &&
+      t.status !== 'cancelled' &&
+      !t.parentId &&
+      (t.sprintId == null || completedSprintMap.has(t.sprintId))
+    );
+    if (candidates.length === 0) return [];
+
+    const groups: { label: string; sublabel?: string; tasks: Task[] }[] = [];
+    // Tasks from completed sprints (most recent first)
+    const completedSprints = [...completedSprintMap.values()].sort((a, b) => b.endDate.localeCompare(a.endDate));
+    for (const sp of completedSprints) {
+      const spTasks = candidates.filter(t => t.sprintId === sp.id);
+      if (spTasks.length > 0) groups.push({ label: sp.name, sublabel: `${fmtSprintDate(sp.startDate)} → ${fmtSprintDate(sp.endDate)}`, tasks: spTasks });
+    }
+    // Unassigned backlog tasks
+    const backlogTasks = candidates.filter(t => t.sprintId === null);
+    if (backlogTasks.length > 0) groups.push({ label: 'Backlog', tasks: backlogTasks });
+    return groups;
+  }, [sprint, tasks, sprints]);
+
+  const totalCarryoverCount = carryoverGroups.reduce((sum, g) => sum + g.tasks.length, 0);
+
+  function toggleCarryoverTask(id: string) {
+    setSelectedCarryoverIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleCarryoverGroup(groupTasks: Task[]) {
+    const ids = groupTasks.map(t => t.id);
+    const allSelected = ids.every(id => selectedCarryoverIds.has(id));
+    setSelectedCarryoverIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  }
 
   function handleSave() {
     if (!name.trim()) return;
@@ -803,12 +855,16 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
       if (hasEpicAncestor(task)) return;
       updateTaskItem(task.id, { sprintId: savedId, status: task.status === 'backlog' ? 'todo' : task.status });
     });
+    // Carry over manually selected tasks
+    selectedCarryoverIds.forEach(id => {
+      updateTaskItem(id, { sprintId: savedId, status: 'todo' });
+    });
     onClose();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={sprint ? 'Edit Sprint' : 'New Sprint'} size="sm">
-      <div className="p-5 space-y-4">
+    <Modal open={open} onClose={onClose} title={sprint ? 'Edit Sprint' : 'New Sprint'} size={!sprint && totalCarryoverCount > 0 ? 'md' : 'sm'}>
+      <div className="p-5 space-y-4 overflow-y-auto">
         <input
           type="text"
           value={name}
@@ -862,6 +918,75 @@ function SprintModal({ open, sprint, onClose }: { open: boolean; sprint: Sprint 
             ))}
           </div>
         </div>
+
+        {/* Carry-over section — only when creating and there are incomplete tasks */}
+        {!sprint && totalCarryoverCount > 0 && (
+          <div className="border border-outline-variant/30 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setCarryoverExpanded(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 bg-surface-container hover:bg-surface-container-high transition-colors text-left"
+            >
+              <span className="material-symbols-outlined text-[16px] text-primary">move_down</span>
+              <span className="flex-1 font-inter text-xs font-semibold text-on-surface">Carry over incomplete tasks</span>
+              {selectedCarryoverIds.size > 0 && (
+                <span className="font-inter text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-on-primary">
+                  {selectedCarryoverIds.size}
+                </span>
+              )}
+              <span className="font-inter text-[10px] text-outline">{totalCarryoverCount} available</span>
+              <span className={`material-symbols-outlined text-[16px] text-outline transition-transform ${carryoverExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+            </button>
+
+            {carryoverExpanded && (
+              <div className="max-h-56 overflow-y-auto divide-y divide-outline-variant/15">
+                {carryoverGroups.map((group) => {
+                  const allSelected = group.tasks.every(t => selectedCarryoverIds.has(t.id));
+                  const someSelected = group.tasks.some(t => selectedCarryoverIds.has(t.id));
+                  return (
+                    <div key={group.label}>
+                      {/* Group header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleCarryoverGroup(group.tasks)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 bg-surface-container-low hover:bg-surface-container text-left transition-colors"
+                      >
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                          allSelected ? 'bg-primary border-primary' : someSelected ? 'bg-primary/30 border-primary/60' : 'border-outline-variant'
+                        }`}>
+                          {(allSelected || someSelected) && <span className="material-symbols-outlined text-[10px] text-on-primary icon-fill">check</span>}
+                        </span>
+                        <span className="flex-1 font-inter text-[11px] font-semibold text-on-surface truncate">{group.label}</span>
+                        {group.sublabel && <span className="font-inter text-[10px] text-outline shrink-0">{group.sublabel}</span>}
+                        <span className="font-inter text-[10px] text-outline shrink-0">{group.tasks.length}</span>
+                      </button>
+                      {/* Tasks */}
+                      {group.tasks.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => toggleCarryoverTask(t.id)}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface-container/50 active:bg-surface-container text-left transition-colors"
+                        >
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                            selectedCarryoverIds.has(t.id) ? 'bg-primary border-primary' : 'border-outline-variant'
+                          }`}>
+                            {selectedCarryoverIds.has(t.id) && <span className="material-symbols-outlined text-[10px] text-on-primary icon-fill">check</span>}
+                          </span>
+                          <span className={`font-inter text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).color}`}>
+                            {(ISSUE_CONFIG[t.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
+                          </span>
+                          <span className="flex-1 font-work-sans text-xs text-on-surface truncate">{t.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-on-surface-variant font-inter font-medium text-sm hover:bg-surface-container">Cancel</button>
           <button onClick={handleSave} disabled={!name.trim()}
