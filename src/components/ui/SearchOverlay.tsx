@@ -84,13 +84,13 @@ export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
         navigateTo: '/habits',
       })),
     ...transactions
-      .filter((t) => t.description.toLowerCase().includes(query.toLowerCase()))
+      .filter((t) => t.name.toLowerCase().includes(query.toLowerCase()))
       .slice(0, 3)
       .map((t) => ({
         type: 'transaction' as const,
-        id: t.id,
-        title: t.description,
-        subtitle: `${t.type === 'income' ? '+' : '-'}$${t.amount.toFixed(2)} · ${t.category}`,
+        id: t.localId,
+        title: t.name,
+        subtitle: `${t.type === 'income' ? '+' : '-'}$${t.amountUSD.toFixed(2)}${t.expenseClassII ? ` · ${t.expenseClassII}` : ''}`,
         icon: 'payments',
         color: 'text-finance-cyan',
         navigateTo: '/finance',

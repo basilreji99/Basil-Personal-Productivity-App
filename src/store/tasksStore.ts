@@ -34,6 +34,7 @@ interface TasksState {
   updateColumn: (id: string, updates: Partial<TaskColumn>) => void;
   deleteColumn: (id: string) => void;
   reorderColumns: (columns: TaskColumn[]) => void;
+  applyTemplate: (templateId: 'kanban' | 'scrum' | 'gtd') => void;
 
   addEvent: (taskId: string, event: Omit<TaskEvent, 'id'>) => void;
   updateEvent: (taskId: string, eventId: string, updates: Partial<TaskEvent>) => void;
@@ -283,6 +284,40 @@ export const useTasksStore = create<TasksState>()(
         })),
 
       reorderColumns: (columns) => set({ columns }),
+
+      applyTemplate: (templateId) => {
+        const TEMPLATES: Record<string, { id: string; name: string; color: string }[]> = {
+          kanban: [
+            { id: 'backlog',     name: 'Backlog',      color: '#9e9e9e' },
+            { id: 'todo',        name: 'To Do',         color: '#737686' },
+            { id: 'in_progress', name: 'In Progress',   color: '#004ac6' },
+            { id: 'review',      name: 'Review',        color: '#712ae2' },
+            { id: 'done',        name: 'Done',          color: '#006243' },
+          ],
+          scrum: [
+            { id: 'backlog',     name: 'Product Backlog', color: '#9e9e9e' },
+            { id: 'todo',        name: 'Sprint Ready',    color: '#737686' },
+            { id: 'in_progress', name: 'In Progress',     color: '#004ac6' },
+            { id: 'review',      name: 'Code Review',     color: '#712ae2' },
+            { id: 'done',        name: 'Done',            color: '#006243' },
+          ],
+          gtd: [
+            { id: 'backlog',     name: 'Inbox',          color: '#9e9e9e' },
+            { id: 'todo',        name: 'Next Actions',   color: '#004ac6' },
+            { id: 'in_progress', name: 'In Progress',    color: '#712ae2' },
+            { id: 'review',      name: 'Waiting For',    color: '#e67e00' },
+            { id: 'done',        name: 'Done',           color: '#006243' },
+          ],
+        };
+        const tplCols = TEMPLATES[templateId];
+        if (!tplCols) return;
+        set((s) => ({
+          columns: s.columns.map((col) => {
+            const tpl = tplCols.find((c) => c.id === col.id);
+            return tpl ? { ...col, name: tpl.name, color: tpl.color } : col;
+          }),
+        }));
+      },
 
       addEvent: (taskId, event) =>
         set((s) => ({

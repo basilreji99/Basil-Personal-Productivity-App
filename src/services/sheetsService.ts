@@ -1,4 +1,5 @@
-import type { BodyMeasurement } from '../types';
+import type { BodyMeasurement, SheetTransaction, SheetNewRow, OweEntry } from '../types';
+import { nanoid } from '../utils/nanoid';
 
 const SPREADSHEET_ID = '1sxvRrh0VP3xuh7nEWbcLStydKavguTl72xUFLouOoaw';
 const HEALTH_SHEET_GID = 851080091;
@@ -106,4 +107,169 @@ export async function syncHealthToSheets(
   }
 
   return { synced: rows.length, alreadySynced: existingDates.size };
+}
+
+// ─── Finance / Expense sheet ─────────────────────────────────────────────────
+
+const FINANCE_SPREADSHEET_ID = '1z00eRDoBIHef0t1ZH97A22eBsnfR5u-GoXNX7irUatw';
+const EXPENSE_SHEET = 'Expense';
+
+// Sheet columns (0-indexed): Day, Month, Year, Name, Expense(USD), Income(USD),
+// TotalExp, Balance, USDRate, InINR, TotalExpINR, ClassI, ClassII, Tags, Trip, State, Note
+
+const MONTH_NAMES: Record<string, number> = {
+  january:1,february:2,march:3,april:4,may:5,june:6,
+  july:7,august:8,september:9,october:10,november:11,december:12,
+  jan:1,feb:2,mar:3,apr:4,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+};
+function parseMonth(v: string): number {
+  const n = parseInt(v);
+  return isNaN(n) ? (MONTH_NAMES[v.toLowerCase().trim()] ?? 0) : n;
+}
+
+function parseExpenseRow(row: string[], rowIndex: number): SheetTransaction | null {
+  const day = parseInt(row[0]);
+  const month = parseMonth(row[1]);
+  const year = parseInt(row[2]);
+  if (!day || !month || !year) return null;
+
+  const expenseUSD = parseFloat(row[4]) || 0;
+  const incomeUSD = parseFloat(row[5]) || 0;
+  const usdRate = parseFloat(row[8]) || 0;
+  const inINR = parseFloat(row[9]) || (expenseUSD || incomeUSD) * usdRate;
+  const type: 'income' | 'expense' = incomeUSD > 0 && expenseUSD === 0 ? 'income' : 'expense';
+  const amountUSD = type === 'income' ? incomeUSD : expenseUSD;
+
+  return {
+    localId: nanoid(),
+    rowIndex,
+    day, month, year,
+    date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    name: row[3] ?? '',
+    expenseUSD,
+    incomeUSD,
+    usdRate,
+    inINR,
+    expenseClassI: row[11] ?? '',
+    expenseClassII: row[12] ?? '',
+    tags: row[13] ?? '',
+    tripName: row[14] ?? '',
+    tripState: row[15] ?? '',
+    note: row[16] ?? '',
+    type,
+    amountUSD,
+    amountINR: inINR,
+  };
+}
+
+export async function readExpenseSheet(token: string): Promise<{ transactions: SheetTransaction[]; error?: string }> {
+  const range = `${EXPENSE_SHEET}!A:Q`;
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${FINANCE_SPREADSHEET_ID}/values/${encodeURIComponent(range)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (e) {
+    return { transactions: [], error: `Network error: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j?.error?.message ?? ''; } catch { /* ignore */ }
+    return { transactions: [], error: res.status === 401 || res.status === 403 ? 'auth' : `Read failed (${res.status})${detail ? ': ' + detail : ''}` };
+  }
+  const data = await res.json();
+  const rows: string[][] = data.values ?? [];
+  if (rows.length === 0) return { transactions: [], error: `Sheet "${EXPENSE_SHEET}" appears empty or tab name is wrong` };
+  const transactions: SheetTransaction[] = [];
+  rows.slice(1).forEach((row, i) => {
+    const tx = parseExpenseRow(row, i + 2);
+    if (tx) transactions.push(tx);
+  });
+  return { transactions };
+}
+
+export async function appendExpenseRows(token: string, rows: SheetNewRow[]): Promise<{ ok: boolean; error?: string }> {
+  const values = rows.map(r => {
+    const amount = r.expenseUSD || r.incomeUSD;
+    const inINR = r.usdRate ? amount * r.usdRate : '';
+    return [
+      r.day, r.month, r.year,
+      r.name,
+      r.expenseUSD || '',
+      r.incomeUSD || '',
+      '', '', // TotalExp, Balance — leave blank (no formula)
+      r.usdRate || '',
+      inINR,
+      '', // TotalExpINR — leave blank
+      r.expenseClassI,
+      r.expenseClassII,
+      r.tags,
+      r.tripName,
+      r.tripState,
+      r.note,
+    ];
+  });
+  const range = `${EXPENSE_SHEET}!A:Q`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${FINANCE_SPREADSHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    return { ok: false, error: res.status === 401 || res.status === 403 ? 'auth' : (err.error?.message ?? `Append failed (${res.status})`) };
+  }
+  return { ok: true };
+}
+
+// ─── Owe sheet ────────────────────────────────────────────────────────────────
+
+const OWE_SHEET = 'Owe';
+
+// Columns: Month, Year, Owe To, Reason, Amount, Currency, Notes
+
+function parseOweRow(row: string[]): OweEntry | null {
+  const month = parseMonth(row[0]);
+  const year = parseInt(row[1]);
+  if (!month || !year) return null;
+  return {
+    localId: nanoid(),
+    month,
+    year,
+    oweTo: row[2]?.trim() ?? '',
+    reason: row[3]?.trim() ?? '',
+    amount: parseFloat(row[4]) || 0,
+    currency: row[5]?.trim().toUpperCase() || 'USD',
+    notes: row[6]?.trim() ?? '',
+  };
+}
+
+export async function readOweSheet(token: string): Promise<{ entries: OweEntry[]; error?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${FINANCE_SPREADSHEET_ID}/values/${encodeURIComponent(OWE_SHEET + '!A:G')}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (e) {
+    return { entries: [], error: `Network error: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j?.error?.message ?? ''; } catch { /* ignore */ }
+    return { entries: [], error: res.status === 401 || res.status === 403 ? 'auth' : `Owe read failed (${res.status})${detail ? ': ' + detail : ''}` };
+  }
+  const data = await res.json();
+  const rows: string[][] = data.values ?? [];
+  if (rows.length === 0) return { entries: [] };
+  const entries: OweEntry[] = [];
+  rows.slice(1).forEach(row => {
+    const e = parseOweRow(row);
+    if (e) entries.push(e);
+  });
+  return { entries };
 }

@@ -77,6 +77,7 @@ export default function Today() {
     <div className="bg-background min-h-screen">
       <TopBar
         title="Today"
+        showBack
         rightSlot={
           <div className="flex items-center gap-1 px-1">
             <span className="font-inter text-xs text-on-surface-variant">

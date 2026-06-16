@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import TopBar from '../components/layout/TopBar';
 import { useGoalsStore, goalProgress, currentQuarter, type Goal, type KeyResult } from '../store/goalsStore';
 
@@ -44,12 +45,19 @@ function KRRow({ kr, goalId, goalStatus, onDelete }: {
   const pct = Math.min(Math.round((kr.current / Math.max(kr.target, 1)) * 100), 100);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(kr.current));
+  const [showHistory, setShowHistory] = useState(false);
 
   function commitEdit() {
     const n = parseFloat(val);
     if (!isNaN(n)) updateKeyResult(goalId, kr.id, { current: Math.max(0, n) });
     setEditing(false);
   }
+
+  const histData = useMemo(() => {
+    const hist = kr.history ?? [];
+    if (hist.length === 0) return [];
+    return hist.map((p) => ({ date: p.date.slice(5), value: p.value }));
+  }, [kr.history]);
 
   return (
     <div className="space-y-1.5">
@@ -81,6 +89,15 @@ function KRRow({ kr, goalId, goalStatus, onDelete }: {
               {kr.current} / {kr.target} {kr.unit}
             </button>
           )}
+          {histData.length > 0 && (
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              className={`p-0.5 transition-colors ${showHistory ? 'text-primary' : 'text-outline hover:text-primary'}`}
+              title="Progress history"
+            >
+              <span className="material-symbols-outlined text-[14px]">show_chart</span>
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="p-0.5 text-outline hover:text-error transition-colors"
@@ -90,6 +107,26 @@ function KRRow({ kr, goalId, goalStatus, onDelete }: {
         </div>
       </div>
       <KRBar pct={pct} status={goalStatus} />
+      {showHistory && histData.length > 0 && (
+        <div className="mt-1 bg-surface-container-low rounded-xl px-3 pt-3 pb-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-inter text-[10px] font-semibold uppercase tracking-wider text-outline">Progress over time</span>
+            <span className="font-inter text-[10px] text-outline">Target: {kr.target} {kr.unit}</span>
+          </div>
+          <ResponsiveContainer width="100%" height={90}>
+            <LineChart data={histData} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+              <XAxis dataKey="date" tick={{ fontSize: 8, fontFamily: 'Inter, sans-serif' }} tickLine={false} axisLine={false} />
+              <YAxis domain={[0, kr.target]} tick={{ fontSize: 8, fontFamily: 'Inter, sans-serif' }} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 10, fontFamily: 'Inter, sans-serif', borderRadius: 6, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,.15)' }}
+                formatter={(v) => [`${v} ${kr.unit}`, 'Value']}
+              />
+              <ReferenceLine y={kr.target} stroke="#006243" strokeDasharray="4 3" strokeWidth={1} />
+              <Line type="monotone" dataKey="value" stroke="#004ac6" strokeWidth={2} dot={{ r: 2.5, fill: '#004ac6' }} activeDot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
@@ -328,6 +365,7 @@ export default function Goals() {
     <div className="bg-background min-h-screen">
       <TopBar
         title="Goals & OKRs"
+        showBack
         rightSlot={
           <button
             onClick={() => setShowAdd(true)}

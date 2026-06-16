@@ -2,12 +2,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from '../utils/nanoid';
 
+export interface KRHistoryPoint {
+  date: string; // 'YYYY-MM-DD'
+  value: number;
+}
+
 export interface KeyResult {
   id: string;
   title: string;
   current: number;
   target: number;
   unit: string;
+  history?: KRHistoryPoint[];
 }
 
 export interface Goal {
@@ -72,9 +78,19 @@ export const useGoalsStore = create<GoalsState>()(
             g.id === goalId
               ? {
                   ...g,
-                  keyResults: g.keyResults.map((kr) =>
-                    kr.id === krId ? { ...kr, ...updates } : kr,
-                  ),
+                  keyResults: g.keyResults.map((kr) => {
+                    if (kr.id !== krId) return kr;
+                    const updated = { ...kr, ...updates };
+                    if (updates.current !== undefined && updates.current !== kr.current) {
+                      const today = new Date().toISOString().slice(0, 10);
+                      const hist = kr.history ?? [];
+                      const last = hist[hist.length - 1];
+                      updated.history = last?.date === today
+                        ? [...hist.slice(0, -1), { date: today, value: updates.current }]
+                        : [...hist, { date: today, value: updates.current }];
+                    }
+                    return updated;
+                  }),
                 }
               : g,
           ),

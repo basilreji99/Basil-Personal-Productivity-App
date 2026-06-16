@@ -148,6 +148,58 @@ export interface Transaction {
   recurringFrequency?: RecurringFrequency;
 }
 
+// ─── Finance (Sheet-backed) ──────────────────────────────────────────────────
+
+export interface OweEntry {
+  localId: string;
+  month: number;
+  year: number;
+  oweTo: string;
+  reason: string;
+  amount: number;
+  currency: string;
+  notes: string;
+}
+
+export interface SheetTransaction {
+  localId: string;     // nanoid — React key, not in sheet
+  rowIndex: number;    // 1-based sheet row; 0 = pending (not yet written)
+  day: number;
+  month: number;
+  year: number;
+  date: string;        // YYYY-MM-DD derived
+  name: string;        // "Income/Expense" column
+  expenseUSD: number;
+  incomeUSD: number;
+  usdRate: number;
+  inINR: number;
+  expenseClassI: string;
+  expenseClassII: string;
+  tags: string;        // raw comma-separated string from sheet
+  tripName: string;
+  tripState: string;
+  note: string;
+  type: 'income' | 'expense';
+  amountUSD: number;
+  amountINR: number;
+}
+
+export interface SheetNewRow {
+  day: number;
+  month: number;
+  year: number;
+  name: string;
+  expenseUSD: number;
+  incomeUSD: number;
+  usdRate: number;
+  expenseClassI: string;
+  expenseClassII: string;
+  tags: string;
+  tripName: string;
+  tripState: string;
+  note: string;
+}
+
 // ─── Habits ──────────────────────────────────────────────────────────────────
 
 export type HabitFrequency = 'daily' | 'weekdays' | 'weekly' | 'monthly';

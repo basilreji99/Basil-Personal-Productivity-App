@@ -5,6 +5,7 @@ import { useFitnessStore } from '../store/fitnessStore';
 import { useTasksStore } from '../store/tasksStore';
 import { useFinanceStore } from '../store/financeStore';
 import { useBooksStore } from '../store/booksStore';
+import { useGoalsStore } from '../store/goalsStore';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -47,6 +48,7 @@ export default function YearlyReview() {
   const { transactions } = useFinanceStore();
   const { gymSessions, sportSessions } = useFitnessStore();
   const { reviews: bookReviews } = useBooksStore();
+  const goals = useGoalsStore(s => s.goals);
 
   const yrStr = String(year);
 
@@ -113,15 +115,16 @@ export default function YearlyReview() {
 
   const financeStats = useMemo(() => {
     const yearTxns = transactions.filter(t => t.date.startsWith(yrStr));
-    const totalSpent = yearTxns.filter(t => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
-    const totalIncome = yearTxns.filter(t => t.type === 'income').reduce((a, t) => a + t.amount, 0);
+    const totalSpent = yearTxns.filter(t => t.type === 'expense').reduce((a, t) => a + t.amountUSD, 0);
+    const totalIncome = yearTxns.filter(t => t.type === 'income').reduce((a, t) => a + t.amountUSD, 0);
     const byCategory: Record<string, number> = {};
     yearTxns.filter(t => t.type === 'expense').forEach(t => {
-      byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
+      const cat = t.expenseClassII || t.expenseClassI || 'Other';
+      byCategory[cat] = (byCategory[cat] ?? 0) + t.amountUSD;
     });
     const spentByMonth = Array(12).fill(0);
     yearTxns.filter(t => t.type === 'expense').forEach(t => {
-      spentByMonth[parseInt(t.date.slice(5, 7)) - 1] += t.amount;
+      spentByMonth[parseInt(t.date.slice(5, 7)) - 1] += t.amountUSD;
     });
     const sortedCats = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
     return { totalSpent, totalIncome, sortedCats, spentByMonth };
@@ -142,6 +145,20 @@ export default function YearlyReview() {
     indigo: '#6366f1', cyan: '#06b6d4',
   };
 
+  const goalsByQuarter = useMemo(() => {
+    return ['Q1', 'Q2', 'Q3', 'Q4'].map(q => {
+      const qGoals = goals.filter(g => g.quarter === `${q} ${year}`);
+      const completed = qGoals.filter(g => g.status === 'completed').length;
+      const abandoned = qGoals.filter(g => g.status === 'abandoned').length;
+      const active = qGoals.filter(g => g.status === 'active').length;
+      return {
+        q, goals: qGoals, completed, abandoned, active,
+        total: qGoals.length,
+        completionRate: qGoals.length > 0 ? Math.round((completed / qGoals.length) * 100) : 0,
+      };
+    }).filter(q => q.total > 0);
+  }, [goals, year]);
+
   const maxGym = Math.max(...gymByMonth, 1);
   const maxSport = Math.max(...sportByMonth, 1);
   const maxHabits = Math.max(...habitsByMonth, 1);
@@ -150,7 +167,7 @@ export default function YearlyReview() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Yearly Review" />
+      <TopBar title="Yearly Review" showBack />
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-6">
 
@@ -310,6 +327,62 @@ export default function YearlyReview() {
             <p className="font-inter text-xs text-outline text-center py-2">No finance data for {year}</p>
           )}
         </section>
+
+        {/* Goals */}
+        {goalsByQuarter.length > 0 && (
+          <section className="space-y-3">
+            <SectionHeader icon="flag" title="Goals" />
+            <div className="grid grid-cols-2 gap-3">
+              {goalsByQuarter.map(({ q, total, completed, abandoned, active, completionRate }) => (
+                <div key={q} className="bg-surface-container-lowest rounded-2xl p-4 shadow-card">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-inter font-semibold text-sm text-on-surface">{q}</p>
+                    <span className="font-inter text-[10px] text-outline">{total} goal{total !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="h-1.5 bg-surface-container rounded-full overflow-hidden mb-3">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${completionRate}%` }} />
+                  </div>
+                  <div className="flex justify-between text-center">
+                    <div>
+                      <p className="font-manrope font-bold text-lg text-emerald-600 dark:text-emerald-400">{completed}</p>
+                      <p className="font-inter text-[9px] text-outline">Done</p>
+                    </div>
+                    <div>
+                      <p className="font-manrope font-bold text-lg text-amber-500">{active}</p>
+                      <p className="font-inter text-[9px] text-outline">Active</p>
+                    </div>
+                    <div>
+                      <p className="font-manrope font-bold text-lg text-outline">{abandoned}</p>
+                      <p className="font-inter text-[9px] text-outline">Dropped</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Full goal list collapsed under each quarter */}
+            <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-card">
+              <div className="divide-y divide-outline-variant/10">
+                {goalsByQuarter.map(({ q, goals: qGoals }) =>
+                  qGoals.map(g => {
+                    const progress = g.keyResults.length > 0
+                      ? Math.min(100, Math.round(g.keyResults.reduce((s, kr) => s + (kr.current / (kr.target || 1)), 0) / g.keyResults.length * 100))
+                      : 0;
+                    return (
+                      <div key={g.id} className="flex items-center gap-3 px-4 py-3">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${g.status === 'completed' ? 'bg-emerald-500' : g.status === 'abandoned' ? 'bg-outline' : 'bg-primary'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-inter text-sm text-on-surface truncate">{g.title}</p>
+                          <p className="font-inter text-[10px] text-outline">{q}</p>
+                        </div>
+                        <span className="font-inter text-xs font-semibold text-on-surface-variant shrink-0">{progress}%</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Books */}
         <section className="space-y-3">

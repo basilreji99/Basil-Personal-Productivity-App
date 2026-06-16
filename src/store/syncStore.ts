@@ -70,6 +70,10 @@ export const useSyncStore = create<SyncState>()(
         } catch {
           // profile fetch failed — keep the token, login still succeeded
         }
+        // Auto-sync on sign-in so locally-queued changes reach Drive immediately
+        if (isLocalDirty() && navigator.onLine) {
+          get().syncNow();
+        }
       },
 
       clearAuth: () =>

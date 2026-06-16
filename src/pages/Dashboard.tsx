@@ -131,7 +131,6 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(() => getTodayString());
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
-  const [showAllTasks, setShowAllTasks] = useState(false);
   const [quickNoteTitle, setQuickNoteTitle] = useState('');
   const [quickNoteContent, setQuickNoteContent] = useState('');
   const quickNoteTitleRef = useRef<HTMLInputElement>(null);
@@ -155,7 +154,6 @@ export default function Dashboard() {
 
   const today = getTodayString();
   const isToday = selectedDate === today;
-  useEffect(() => { setShowAllTasks(false); }, [selectedDate]);
 
   const selectedDayTasks = useMemo(() => {
     if (isToday) {
@@ -354,8 +352,9 @@ export default function Dashboard() {
                 </button>
               )}
               {isToday && !sectionEmpty && (
-                <button onClick={() => navigate('/tasks')} className="font-inter text-xs font-semibold text-primary hover:underline">
-                  All tasks
+                <button onClick={() => navigate('/today')} className="font-inter text-xs font-semibold text-primary hover:underline flex items-center gap-0.5">
+                  View all
+                  <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
                 </button>
               )}
             </div>
@@ -375,8 +374,8 @@ export default function Dashboard() {
             </div>
           ))}
 
-          {/* Tasks for selected day — top 3 by default */}
-          {(showAllTasks ? selectedDayTasks : selectedDayTasks.slice(0, 3)).map((task) => (
+          {/* Tasks for today (top 5) or selected day */}
+          {selectedDayTasks.map((task) => (
             <div
               key={task.id}
               className={`bg-surface-container-lowest rounded-xl p-4 shadow-card cursor-pointer hover:shadow-card-hover transition-shadow ${
@@ -416,14 +415,6 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
-          {selectedDayTasks.length > 3 && (
-            <button
-              onClick={() => setShowAllTasks((v) => !v)}
-              className="w-full py-2 rounded-xl border border-outline-variant/30 font-inter text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-colors"
-            >
-              {showAllTasks ? 'Show less' : `+${selectedDayTasks.length - 3} more tasks`}
-            </button>
-          )}
 
           {/* Empty state */}
           {sectionEmpty && (

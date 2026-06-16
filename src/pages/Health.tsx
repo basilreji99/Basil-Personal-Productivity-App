@@ -676,7 +676,7 @@ export default function Health() {
                         <span className="material-symbols-outlined text-[14px] text-blue-500">scale</span>
                         <p className="font-inter text-[10px] text-blue-500 font-semibold uppercase tracking-wide">Weight</p>
                       </div>
-                      <p className="font-manrope font-bold text-2xl text-blue-700">{latest.weight}<span className="text-xs font-normal ml-0.5">kg</span></p>
+                      <p className="font-manrope font-bold text-2xl text-blue-600 dark:text-blue-300">{latest.weight}<span className="text-xs font-normal ml-0.5">kg</span></p>
                       {weightChange !== null && (
                         <p className="font-inter text-[10px] text-blue-400 mt-0.5">
                           {parseFloat(weightChange) < 0 ? '' : '+'}{weightChange}kg total
@@ -692,7 +692,7 @@ export default function Health() {
                         <span className="material-symbols-outlined text-[14px] text-orange-500">water_drop</span>
                         <p className="font-inter text-[10px] text-orange-500 font-semibold uppercase tracking-wide">Body Fat</p>
                       </div>
-                      <p className="font-manrope font-bold text-2xl text-orange-700">{latest.bodyFat}<span className="text-xs font-normal ml-0.5">%</span></p>
+                      <p className="font-manrope font-bold text-2xl text-orange-600 dark:text-orange-300">{latest.bodyFat}<span className="text-xs font-normal ml-0.5">%</span></p>
                       {bfCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bfCat.color }}>{bfCat.label}</p>}
                     </button>
                   )}
@@ -704,7 +704,7 @@ export default function Health() {
                         <span className="material-symbols-outlined text-[14px] text-purple-500">person</span>
                         <p className="font-inter text-[10px] text-purple-500 font-semibold uppercase tracking-wide">BMI</p>
                       </div>
-                      <p className="font-manrope font-bold text-2xl text-purple-700">{bmi}</p>
+                      <p className="font-manrope font-bold text-2xl text-purple-600 dark:text-purple-300">{bmi}</p>
                       {bmiCat && <p className="font-inter text-[10px] mt-0.5 font-semibold" style={{ color: bmiCat.color }}>{bmiCat.label}</p>}
                     </button>
                   )}
@@ -716,7 +716,7 @@ export default function Health() {
                         <span className="material-symbols-outlined text-[14px] text-violet-500">fitness_center</span>
                         <p className="font-inter text-[10px] text-violet-500 font-semibold uppercase tracking-wide">Muscle</p>
                       </div>
-                      <p className="font-manrope font-bold text-2xl text-violet-700">{latest.muscleMass}<span className="text-xs font-normal ml-0.5">kg</span></p>
+                      <p className="font-manrope font-bold text-2xl text-violet-600 dark:text-violet-300">{latest.muscleMass}<span className="text-xs font-normal ml-0.5">kg</span></p>
                     </button>
                   )}
 
@@ -727,7 +727,7 @@ export default function Health() {
                         <span className="material-symbols-outlined text-[14px] text-pink-500">local_fire_department</span>
                         <p className="font-inter text-[10px] text-pink-500 font-semibold uppercase tracking-wide">BMR</p>
                       </div>
-                      <p className="font-manrope font-bold text-2xl text-pink-700">{latest.bmr}<span className="text-xs font-normal ml-0.5">kcal</span></p>
+                      <p className="font-manrope font-bold text-2xl text-pink-600 dark:text-pink-300">{latest.bmr}<span className="text-xs font-normal ml-0.5">kcal</span></p>
                     </button>
                   )}
                 </div>

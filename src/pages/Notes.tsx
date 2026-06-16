@@ -17,6 +17,7 @@ import TagManager from '../components/ui/TagManager';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useNotesStore } from '../store/notesStore';
 import { useTagStore } from '../store/tagStore';
+import SyncBadge from '../components/ui/SyncBadge';
 import type { Note, NoteFolder } from '../types';
 
 function FolderModal({
@@ -339,8 +340,8 @@ export default function Notes() {
       {view !== 'folders' && <div className="sticky top-14 z-30 bg-surface-container-low shadow-sm" style={{ top: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
 
         {/* Search bar */}
-        <div className="px-4 pt-2 pb-1">
-          <div className="flex items-center gap-2 bg-surface-container rounded-xl px-3 h-9 border border-outline-variant/20">
+        <div className="px-4 pt-2 pb-1 flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 bg-surface-container rounded-xl px-3 h-9 border border-outline-variant/20">
             <span className="material-symbols-outlined text-[16px] text-outline shrink-0">search</span>
             <input
               type="text"
@@ -355,6 +356,7 @@ export default function Notes() {
               </button>
             )}
           </div>
+          <SyncBadge />
         </div>
 
         {/* Folder bar — DnD sortable */}

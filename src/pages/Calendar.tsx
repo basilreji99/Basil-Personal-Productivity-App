@@ -41,7 +41,7 @@ function EventRow({
     >
       <div className="w-1 self-stretch rounded-full shrink-0 min-h-[20px]" style={{ backgroundColor: dotColor }} />
       <div className="flex-1 min-w-0">
-        <p className="font-inter font-medium text-sm text-on-surface">{ev.title}</p>
+        <p className="font-inter font-medium text-sm text-on-surface truncate">{ev.title}</p>
         {ev.location && (
           <p className="font-inter text-xs text-on-surface-variant truncate mt-0.5">
             <span className="material-symbols-outlined text-[12px] align-middle mr-0.5">location_on</span>

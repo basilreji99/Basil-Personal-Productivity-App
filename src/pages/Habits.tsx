@@ -12,8 +12,12 @@ const HABIT_BG: Record<string, string> = {
   orange: 'bg-orange-500', pink: 'bg-pink-500', teal: 'bg-teal-500',
 };
 const HABIT_LIGHT: Record<string, string> = {
-  blue: 'bg-blue-50', green: 'bg-green-50', purple: 'bg-purple-50',
-  orange: 'bg-orange-50', pink: 'bg-pink-50', teal: 'bg-teal-50',
+  blue: 'bg-blue-50 dark:bg-blue-950/40',
+  green: 'bg-green-50 dark:bg-green-950/40',
+  purple: 'bg-purple-50 dark:bg-purple-950/40',
+  orange: 'bg-orange-50 dark:bg-orange-950/40',
+  pink: 'bg-pink-50 dark:bg-pink-950/40',
+  teal: 'bg-teal-50 dark:bg-teal-950/40',
 };
 const HABIT_TEXT: Record<string, string> = {
   blue: 'text-blue-600', green: 'text-green-600', purple: 'text-purple-600',
@@ -349,7 +353,7 @@ export default function Habits() {
                 return (
                   <div
                     key={habit.id}
-                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4 group"
+                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4"
                     style={{ borderLeftColor: done ? HABIT_BORDER[habit.color] : '#c3c6d7' }}
                   >
                     <div className="p-4">
@@ -496,7 +500,7 @@ export default function Habits() {
                       })()}
                     </div>
                     {/* Actions */}
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-3 px-4 pb-3">
+                    <div className="flex items-center gap-3 px-4 pb-3 border-t border-outline-variant/10 pt-2.5">
                       {done && habit.hasNotes && (
                         <button onClick={() => setNotesTarget({ habit, date: today })} className="font-inter text-xs text-primary flex items-center gap-1">
                           <span className="material-symbols-outlined text-[14px]">edit_note</span>
@@ -506,7 +510,7 @@ export default function Habits() {
                       <button onClick={() => { setEditHabit(habit); setModalOpen(true); }} className="font-inter text-xs text-on-surface-variant flex items-center gap-1">
                         <span className="material-symbols-outlined text-[14px]">edit</span>Edit
                       </button>
-                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-on-surface-variant flex items-center gap-1 ml-auto">
+                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-error/60 flex items-center gap-1 ml-auto">
                         <span className="material-symbols-outlined text-[14px]">delete</span>Delete
                       </button>
                     </div>
@@ -532,7 +536,7 @@ export default function Habits() {
                 return (
                   <div
                     key={habit.id}
-                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4 group"
+                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4"
                     style={{ borderLeftColor: metTarget ? HABIT_BORDER[habit.color] : '#c3c6d7' }}
                   >
                     <div className="p-4">
@@ -642,11 +646,11 @@ export default function Habits() {
                         </div>
                       )}
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-3 px-4 pb-3">
+                    <div className="flex items-center gap-3 px-4 pb-3 border-t border-outline-variant/10 pt-2.5">
                       <button onClick={() => { setEditHabit(habit); setModalOpen(true); }} className="font-inter text-xs text-on-surface-variant flex items-center gap-1">
                         <span className="material-symbols-outlined text-[14px]">edit</span>Edit
                       </button>
-                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-on-surface-variant flex items-center gap-1 ml-auto">
+                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-error/60 flex items-center gap-1 ml-auto">
                         <span className="material-symbols-outlined text-[14px]">delete</span>Delete
                       </button>
                     </div>
@@ -675,7 +679,7 @@ export default function Habits() {
                 return (
                   <div
                     key={habit.id}
-                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4 group"
+                    className="bg-surface-container-lowest rounded-xl shadow-card border-l-4"
                     style={{ borderLeftColor: completed ? HABIT_BORDER[habit.color] : '#c3c6d7' }}
                   >
                     <div className="p-4">
@@ -737,7 +741,7 @@ export default function Habits() {
                         </div>
                       )}
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-3 px-4 pb-3">
+                    <div className="flex items-center gap-3 px-4 pb-3 border-t border-outline-variant/10 pt-2.5">
                       {completed && habit.hasNotes && (
                         <button onClick={() => setNotesTarget({ habit, date: today })} className="font-inter text-xs text-primary flex items-center gap-1">
                           <span className="material-symbols-outlined text-[14px]">edit_note</span>
@@ -747,7 +751,7 @@ export default function Habits() {
                       <button onClick={() => { setEditHabit(habit); setModalOpen(true); }} className="font-inter text-xs text-on-surface-variant flex items-center gap-1">
                         <span className="material-symbols-outlined text-[14px]">edit</span>Edit
                       </button>
-                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-on-surface-variant flex items-center gap-1 ml-auto">
+                      <button onClick={() => setDeleteId(habit.id)} className="font-inter text-xs text-error/60 flex items-center gap-1 ml-auto">
                         <span className="material-symbols-outlined text-[14px]">delete</span>Delete
                       </button>
                     </div>

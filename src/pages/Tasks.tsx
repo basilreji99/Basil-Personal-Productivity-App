@@ -22,6 +22,7 @@ import Modal from '../components/ui/Modal';
 import { useTasksStore } from '../store/tasksStore';
 import { useSprintStore } from '../store/sprintStore';
 import { useTagStore } from '../store/tagStore';
+import SyncBadge from '../components/ui/SyncBadge';
 import type { Task, IssueType, Sprint } from '../types';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -409,6 +410,7 @@ function EpicSection({
   const c = EPIC_COLORS[colorIdx];
   const { updateTask, reorderItems } = useTasksStore();
   const [expanded, setExpanded] = useState(false);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
 
   const directChildren = useMemo(
     () => tasks
@@ -420,6 +422,9 @@ function EpicSection({
       }),
     [tasks, epic.id],
   );
+
+  const activeChildren = useMemo(() => directChildren.filter((t) => t.status !== 'done'), [directChildren]);
+  const doneChildren = useMemo(() => directChildren.filter((t) => t.status === 'done'), [directChildren]);
 
   const descendants = useMemo(() => getDescendants(epic.id, tasks), [epic.id, tasks]);
   const total = descendants.length;
@@ -437,10 +442,10 @@ function EpicSection({
   function handleChildDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIdx = directChildren.findIndex((item) => item.id === active.id);
-    const newIdx = directChildren.findIndex((item) => item.id === over.id);
+    const oldIdx = activeChildren.findIndex((item) => item.id === active.id);
+    const newIdx = activeChildren.findIndex((item) => item.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
-    reorderItems(arrayMove(directChildren, oldIdx, newIdx).map((item) => item.id));
+    reorderItems(arrayMove(activeChildren, oldIdx, newIdx).map((item) => item.id));
   }
 
   return (
@@ -512,11 +517,12 @@ function EpicSection({
       {/* Children + add buttons inside expanded panel */}
       {expanded && (
         <div className={`border-t ${c.divider}`}>
-          {directChildren.length > 0 && (
+          {/* Active children */}
+          {activeChildren.length > 0 && (
             <div className="px-4 pt-2 pb-1 space-y-1">
               <DndContext sensors={childSensors} collisionDetection={closestCenter} onDragEnd={handleChildDragEnd}>
-                <SortableContext items={directChildren.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                  {directChildren.map((child) => (
+                <SortableContext items={activeChildren.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                  {activeChildren.map((child) => (
                     <SortableTaskRow
                       key={child.id}
                       task={child}
@@ -528,6 +534,28 @@ function EpicSection({
                   ))}
                 </SortableContext>
               </DndContext>
+            </div>
+          )}
+
+          {/* Completed subsection */}
+          {doneChildren.length > 0 && (
+            <div className={`mx-4 mb-1 border-t ${c.divider}`}>
+              <button
+                onClick={() => setCompletedExpanded((v) => !v)}
+                className="w-full flex items-center gap-1.5 py-1.5 text-left"
+              >
+                <span className={`material-symbols-outlined text-[13px] ${c.icon} transition-transform ${completedExpanded ? 'rotate-90' : ''}`}>chevron_right</span>
+                <span className={`font-inter text-[10px] font-semibold ${c.itemCount}`}>
+                  Completed · {doneChildren.length}
+                </span>
+              </button>
+              {completedExpanded && (
+                <div className="space-y-1 pb-2">
+                  {doneChildren.map((child) => (
+                    <TaskRow key={child.id} task={child} depth={0} tasks={tasks} onEdit={onEdit} onAddChild={onAddChild} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -546,7 +574,7 @@ function EpicSection({
               <span className="material-symbols-outlined text-[14px]">add</span>
               Task
             </button>
-            <span className={`font-inter text-xs ${c.itemCount} ml-auto`}>{directChildren.length} items</span>
+            <span className={`font-inter text-xs ${c.itemCount} ml-auto`}>{activeChildren.length} active</span>
           </div>
         </div>
       )}
@@ -1677,10 +1705,69 @@ function MoveTaskPicker({ open, onClose, tasks, title, onPick }: {
   );
 }
 
+// ─── Board Template Modal ─────────────────────────────────────────────────────
+
+const BOARD_TEMPLATES: { id: 'kanban' | 'scrum' | 'gtd'; name: string; desc: string; columns: string[] }[] = [
+  {
+    id: 'kanban',
+    name: 'Kanban',
+    desc: 'Visual pull-based flow — limit WIP and move work through stages.',
+    columns: ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'],
+  },
+  {
+    id: 'scrum',
+    name: 'Scrum',
+    desc: 'Sprint-based delivery — separate product backlog from sprint commitments.',
+    columns: ['Product Backlog', 'Sprint Ready', 'In Progress', 'Code Review', 'Done'],
+  },
+  {
+    id: 'gtd',
+    name: 'GTD',
+    desc: "Getting Things Done — capture everything, then clarify and organise.",
+    columns: ['Inbox', 'Next Actions', 'In Progress', 'Waiting For', 'Done'],
+  },
+];
+
+function BoardTemplateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { applyTemplate } = useTasksStore();
+  if (!open) return null;
+  return (
+    <Modal open={open} onClose={onClose} title="Board Templates" size="sm">
+      <div className="p-5 space-y-3">
+        <p className="font-inter text-xs text-on-surface-variant">
+          Rename your board columns to match a workflow style. Existing tasks are not affected.
+        </p>
+        {BOARD_TEMPLATES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => { applyTemplate(t.id); onClose(); }}
+            className="w-full text-left bg-surface-container rounded-xl p-3 hover:bg-surface-container-high active:scale-[0.99] transition-all"
+          >
+            <p className="font-inter font-semibold text-sm text-on-surface">{t.name}</p>
+            <p className="font-inter text-[11px] text-on-surface-variant mt-0.5">{t.desc}</p>
+            <div className="flex items-center gap-1 mt-2 flex-wrap">
+              {t.columns.map((col, i) => (
+                <span key={col} className="flex items-center gap-0.5">
+                  <span className="font-inter text-[9px] font-semibold text-on-surface-variant px-1.5 py-0.5 bg-surface-container-low rounded border border-outline-variant/30">
+                    {col}
+                  </span>
+                  {i < t.columns.length - 1 && (
+                    <span className="material-symbols-outlined text-[10px] text-outline">arrow_forward</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main Tasks page ──────────────────────────────────────────────────────────
 
 export default function Tasks() {
-  const { tasks, columns, addTask, updateTask, reorderItems } = useTasksStore();
+  const { tasks, columns, addTask, updateTask, deleteTask, reorderItems } = useTasksStore();
   const { sprints, activeSprint, deleteSprint, updateSprint } = useSprintStore();
   const pinnedTags = useTagStore((s) => s.pinned);
   const tagUsage = useTagStore((s) => s.usage);
@@ -1732,6 +1819,8 @@ export default function Tasks() {
   const [defaultSprintId, setDefaultSprintId] = useState<string | null>(null);
   const [boardSort, setBoardSort] = useState<Record<string, BoardSort>>({});
   const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
+  const [templateOpen, setTemplateOpen]   = useState(false);
+  const [fadingIds, setFadingIds]         = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId]       = useState<string | null>(null);
   const [pickerOpen, setPickerOpen]       = useState(false);
   const [pickerSource, setPickerSource]   = useState<string>('todo');
@@ -1971,6 +2060,18 @@ export default function Tasks() {
     }
   };
 
+  const handleDumpDone = (task: Task) => {
+    updateTask(task.id, { status: 'done' });
+    const isOrphan = !task.parentId && !task.sprintId && (!task.tags || task.tags.length === 0) && !task.description;
+    if (isOrphan) {
+      setFadingIds((prev) => new Set([...prev, task.id]));
+      setTimeout(() => {
+        deleteTask(task.id);
+        setFadingIds((prev) => { const n = new Set(prev); n.delete(task.id); return n; });
+      }, 1200);
+    }
+  };
+
   // ── Epic drag reorder ─────────────────────────────────────────────────────
 
   function handleEpicDragEnd(event: DragEndEvent) {
@@ -2008,7 +2109,7 @@ export default function Tasks() {
       >
         <div className="px-4 pt-2.5 pb-1 flex items-center justify-between gap-3">
           {/* View toggle */}
-          <div className="flex bg-surface-container rounded-xl p-0.5 gap-0.5 overflow-x-auto no-scrollbar">
+          <div className="flex bg-surface-container rounded-xl p-0.5 gap-0.5 overflow-x-auto no-scrollbar shrink-0">
             {([
               { id: 'backlog',        label: 'Backlog'   },
               { id: 'sprint_backlog', label: '⚡ Backlog'  },
@@ -2028,7 +2129,16 @@ export default function Tasks() {
             ))}
           </div>
 
+          <SyncBadge />
+
           <div className="flex gap-1.5">
+            <button
+              onClick={() => setTemplateOpen(true)}
+              className="p-1.5 rounded-lg border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-primary transition-colors"
+              title="Board templates"
+            >
+              <span className="material-symbols-outlined text-[16px]">dashboard_customize</span>
+            </button>
             <button
               onClick={() => openNew('backlog', null, 'epic')}
               className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-100 text-purple-700 border border-purple-300 rounded-lg font-inter font-semibold text-xs"
@@ -2230,10 +2340,23 @@ export default function Tasks() {
                       className="flex-1 bg-transparent border-none outline-none font-work-sans text-sm text-on-surface placeholder:text-outline/50"
                     />
                   </div>
-                  {backlogItems.map((task) => {
+                  {backlogItems.filter((t) => !fadingIds.has(t.id) || true).map((task) => {
                     const taskSprint = task.sprintId ? sprints.find((s) => s.id === task.sprintId) : null;
+                    const isFading = fadingIds.has(task.id);
                     return (
-                      <div key={task.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-surface-container group">
+                      <div
+                        key={task.id}
+                        className={`flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-surface-container group transition-all duration-500 ${
+                          isFading ? 'opacity-0 scale-95 -translate-x-2' : 'opacity-100'
+                        }`}
+                      >
+                        <button
+                          onClick={() => handleDumpDone(task)}
+                          className="w-4 h-4 rounded-full border-2 border-outline-variant hover:border-tertiary flex items-center justify-center shrink-0 transition-colors"
+                          title="Mark done"
+                        >
+                          {isFading && <span className="material-symbols-outlined text-[9px] text-tertiary icon-fill">check</span>}
+                        </button>
                         <span className={`font-inter text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).bg} ${(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).color}`}>
                           {(ISSUE_CONFIG[task.issueType] ?? ISSUE_CONFIG.task).label.slice(0, 3).toUpperCase()}
                         </span>
@@ -3042,6 +3165,7 @@ export default function Tasks() {
         title={pickerTarget === 'in_progress' ? 'Move to In Progress' : 'Move to Review'}
         onPick={(t) => updateTask(t.id, { status: pickerTarget })}
       />
+      <BoardTemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} />
     </div>
   );
 }

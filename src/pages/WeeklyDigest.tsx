@@ -155,11 +155,12 @@ export default function WeeklyDigest() {
 
   const financeStats = useMemo(() => {
     const periodTxns = transactions.filter(t => t.date >= rangeStart && t.date <= rangeEnd);
-    const spent = periodTxns.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
-    const income = periodTxns.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+    const spent = periodTxns.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amountUSD, 0);
+    const income = periodTxns.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amountUSD, 0);
     const byCategory: Record<string, number> = {};
     periodTxns.filter(t => t.type === 'expense').forEach(t => {
-      byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
+      const cat = t.expenseClassII || t.expenseClassI || 'Other';
+      byCategory[cat] = (byCategory[cat] ?? 0) + t.amountUSD;
     });
     const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
     return { spent, income, topCategory };
@@ -180,7 +181,7 @@ export default function WeeklyDigest() {
 
   return (
     <div className="bg-background min-h-screen">
-      <TopBar title="Digest" />
+      <TopBar title="Digest" showBack />
 
       <main className="max-w-screen-xl mx-auto px-4 py-4 pb-28 space-y-5">
 
